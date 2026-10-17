@@ -56,6 +56,17 @@ Guía para quien programe en este repositorio (personas o Claude).
 - `/mi-plan` ingresa con SMS y guarda la sesión solo en memoria; al ir a pagar la cierra.
 - `/terminos` y `/privacidad` son borradores para revisión legal: al cambiarlos, sube `TERMS_VERSION`.
 
+## App
+
+- Un solo código Flutter (`app/`) para Android, iPhone, Windows, Mac y Linux: en el celular, navegación abajo; desde 840 px, al costado.
+- Las reglas que la app muestra antes de enviar (IGV, RUC, fecha de Lima, dinero) viven en `app/lib/core/` y replican las del backend con los mismos casos de prueba. Un cambio de regla se hace en los dos lados.
+- La app nunca arma asientos: manda la operación y muestra la `explanation` del servidor. Los errores se muestran con el `message` del servidor.
+- Montos en céntimos (`Cents`); para escribir, `parseSoles()` acepta «118», «118,50» o «1,200.00».
+- Accesible para quien tenga poca experiencia o vista cansada: botones de 56 px o más, textos cortos sin jerga y nada que se desborde con la letra al 150 % (hay una prueba). Los botones de solo ícono llevan `tooltip`.
+- Pruebas de pantallas en tamaño de teléfono (390 × 844) con `FakeContabiliApi`; la prueba de punta a punta (`integration_test/`) usa el backend real y deja capturas.
+- La tarjeta nunca pasa por la app: Mi plan crea la orden y abre `/pagar` en el navegador.
+- Formato: `dart format .` con ancho 100. Análisis sin avisos: `flutter analyze --fatal-infos`.
+
 ## Base de datos
 
 - El esquema vive en `backend/src/db/schema/`. Para cambiarlo:

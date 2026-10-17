@@ -22,6 +22,10 @@ empresa que se paga en el sitio o en la app.
   - **Licencias**: 30 días gratis por empresa; luego plan Emprendedor o
     Negocio, por mes o por año, pagado con Yape o tarjeta (Culqi). Vencida, la
     empresa queda en solo lectura.
+- **App** (`app/`): Flutter, un solo código para Android, iPhone, Windows, Mac
+  y Linux. Inicio con el resumen y cuatro botones grandes (Vendí, Gasté, Cobré,
+  Pagué), movimientos con anular, cierre de mes, Mi plan (paga en el navegador)
+  y equipo. Probada con letra al 150 % y de punta a punta contra el backend.
 - **Sitio público** (lo sirve el backend): portada, `/precios`, `/descargas`,
   `/mi-plan` (ingresar y pagar desde el navegador), `/pagar/<orden>` y los
   borradores de `/terminos` y `/privacidad`.
@@ -67,8 +71,8 @@ Sin `from`/`to`, los reportes van del 1 de enero hasta hoy (hora de Lima).
 1. ~~Ingreso con celular y sesión; personas y permisos por empresa.~~
 2. ~~API del libro diario y plan de cuentas; libro mayor y balance de comprobación.~~
 3. ~~Cierre mensual, operaciones fáciles, resumen, licencias, cobro y sitio.~~
-4. App Flutter para Android, iOS, Windows, macOS y Linux (un solo código), con
-   los instaladores publicados en `/descargas`.
+4. ~~App Flutter para Android, iOS, Windows, macOS y Linux.~~ Falta: instaladores
+   firmados (MSIX, DMG notarizado, .deb, Play y App Store) y publicarlos en `/descargas`.
 5. Avisos antes de que venza el plan; comprobante electrónico de cada pago de licencia.
 6. Registro de ventas y de compras desde comprobantes; exportar a Excel y PDF.
 7. Facturación electrónica (OSE/PSE) y libros electrónicos PLE.
@@ -85,5 +89,17 @@ pnpm start:dev
 ```
 
 Antes de subir: `pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e`.
+
+La app (con el backend corriendo en el puerto 3000):
+
+```sh
+cd app
+flutter run --dart-define=CONTABILI_API=http://localhost:3000/api/v1 \
+  --dart-define=CONTABILI_WEB=http://localhost:3000
+```
+
+Antes de subir: `dart format . && flutter analyze --fatal-infos && flutter test`. La
+prueba de punta a punta (`integration_test/`) corre en el CI contra el backend real;
+las versiones para descargar se compilan desde Actions → App → Run workflow.
 
 Las convenciones están en [CLAUDE.md](CLAUDE.md).

@@ -1,0 +1,151 @@
+name: App
+
+on:
+  push:
+    paths:
+      - 'app/**'
+      - 'backend/**'
+      - '.github/workflows/app.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'backend/**'
+      - '.github/workflows/app.yml'
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'Compilar las versiones para descargar'
+        type: boolean
+        default: true
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Formato, análisis y pruebas
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test
+      - run: flutter analyze --fatal-infos
+      - run: flutter test
+
+  e2e:
+    name: De punta a punta (escritorio contra el backend)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: contabili
+          POSTGRES_PASSWORD: contabili
+          POSTGRES_DB: contabili_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U contabili -d contabili_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://contabili:contabili@localhost:5432/contabili_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: backend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+      - name: Backend con SMS por consola
+        working-directory: backend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm db:migrate
+          pnpm build
+          NODE_ENV=development PORT=3100 SMS_PROVIDER=console PAYMENTS_PROVIDER=fake \
+            nohup node dist/main.js > "$RUNNER_TEMP/backend.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3100/health && break; sleep 1; done
+      - name: Dependencias de Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev xvfb
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prueba de punta a punta
+        working-directory: app
+        run: |
+          mkdir -p "$RUNNER_TEMP/capturas"
+          flutter pub get
+          xvfb-run -a -s "-screen 0 1280x800x24" flutter test integration_test -d linux \
+            --dart-define=CONTABILI_API=http://localhost:3100/api/v1 \
+            --dart-define=SMS_LOG="$RUNNER_TEMP/backend.log" \
+            --dart-define=SHOTS="$RUNNER_TEMP/capturas"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-de-la-app
+          path: ${{ runner.temp }}/capturas
+
+  build:
+    name: Versión para ${{ matrix.name }}
+    # Solo a pedido (Actions → App → Run workflow) o al publicar una etiqueta v*.
+    if: github.event_name == 'workflow_dispatch' && inputs.build || startsWith(github.ref, 'refs/tags/v')
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            build: linux
+            artifact: app/build/linux/x64/release/bundle
+          - name: Windows
+            os: windows-latest
+            build: windows
+            artifact: app/build/windows/x64/runner/Release
+          - name: Mac
+            os: macos-latest
+            build: macos
+            artifact: app/build/macos/Build/Products/Release/Contabili.app
+          - name: Android
+            os: ubuntu-latest
+            build: apk
+            artifact: app/build/app/outputs/flutter-apk/app-release.apk
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.build == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev
+      - if: matrix.build == 'apk'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build ${{ matrix.build }} --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contabili-${{ matrix.build }}
+          path: ${{ matrix.artifact }}

@@ -1,0 +1,31 @@
+name: contabili
+description: Contabilidad fácil para tu negocio, en el celular y en la computadora.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.10.0 <4.0.0"
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Calendario y textos del sistema en español.
+  flutter_localizations:
+    sdk: flutter
+  http: ">=1.2.0 <2.0.0"
+  # Tokens de la sesión en el almacén seguro de cada sistema.
+  flutter_secure_storage: ">=9.2.0 <11.0.0"
+  # Abrir la página de pago, los términos y la privacidad en el navegador.
+  url_launcher: ">=6.3.0 <7.0.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # Prueba de punta a punta: la app real contra el backend real.
+  integration_test:
+    sdk: flutter
+  flutter_lints: ">=4.0.0 <8.0.0"
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,207 @@
+import 'package:flutter/material.dart';
+
+import '../api/api.dart';
+import '../core/dates.dart';
+import '../core/money.dart';
+import '../session/session.dart';
+import '../ui/theme.dart';
+import '../ui/widgets.dart';
+
+/// Mi plan: cuánto le queda, los planes y pagar con Yape o tarjeta en el
+/// navegador (la tarjeta nunca pasa por la app).
+class PlanScreen extends StatefulWidget {
+  const PlanScreen({super.key, required this.session});
+
+  final SessionController session;
+
+  @override
+  State<PlanScreen> createState() => _PlanScreenState();
+}
+
+class _PlanScreenState extends State<PlanScreen> {
+  Billing? _billing;
+  Object? _error;
+  BillingCycle _cycle = BillingCycle.annual;
+  String? _plan;
+  bool _busy = false;
+  String? _message;
+  bool _waitingPayment = false;
+
+  Company get _company => widget.session.company!;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _error = null);
+    try {
+      final billing = await widget.session.api.billing(_company.id);
+      if (mounted) {
+        setState(() {
+          _billing = billing;
+          _plan ??= billing.plans.last.code;
+        });
+      }
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  Future<void> _pay() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final url = await widget.session.api.createOrder(_company.id, plan: _plan!, cycle: _cycle);
+      final opened = await widget.session.openLink(url);
+      setState(() {
+        _waitingPayment = opened;
+        _message = opened
+            ? 'Abrimos la página de pago en tu navegador. Cuando termines, vuelve aquí.'
+            : 'No pudimos abrir el navegador. Entra a ${widget.session.page('/mi-plan')} para pagar.';
+      });
+    } on ApiException catch (error) {
+      setState(() => _message = error.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _checkPayment() async {
+    await _load();
+    setState(() => _waitingPayment = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final billing = _billing;
+    if (billing == null) return LoadState(error: _error, onRetry: _load);
+    final license = billing.license;
+    final owner = _company.role == Role.owner;
+    final selected = billing.plans.firstWhere((p) => p.code == _plan);
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          ReadableWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(switch (license.status) {
+                          LicenseStatus.trial => 'Prueba gratis del plan ${license.planName}',
+                          LicenseStatus.active => 'Plan ${license.planName}',
+                          LicenseStatus.expired => 'Tu plan venció',
+                        }, style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 6),
+                        Text(switch (license.status) {
+                          LicenseStatus.trial =>
+                            'Te quedan ${license.daysLeft} días (hasta el ${formatInstant(license.endsAt)}).',
+                          LicenseStatus.active =>
+                            'Pagado hasta el ${formatInstant(license.endsAt)}.',
+                          LicenseStatus.expired =>
+                            'Venció el ${formatInstant(license.endsAt)}. Tu empresa está en solo '
+                                'lectura: renueva para seguir anotando.',
+                        }, style: const TextStyle(fontSize: 17)),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${license.members} de ${license.maxMembers} personas en tu equipo.',
+                          style: const TextStyle(color: ContabiliColors.ink2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text('Elige tu plan', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 10),
+                SegmentedButton<BillingCycle>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: BillingCycle.monthly, label: Text('Por mes')),
+                    ButtonSegment(
+                      value: BillingCycle.annual,
+                      label: Text('Por año (2 meses gratis)', textAlign: TextAlign.center),
+                    ),
+                  ],
+                  selected: {_cycle},
+                  onSelectionChanged: (s) => setState(() => _cycle = s.first),
+                ),
+                const SizedBox(height: 12),
+                RadioGroup<String>(
+                  groupValue: _plan,
+                  onChanged: (v) => setState(() => _plan = v),
+                  child: Column(
+                    children: [
+                      for (final plan in billing.plans) ...[
+                        Card(
+                          child: RadioListTile<String>(
+                            value: plan.code,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            // En dos líneas: con letra grande, nombre y precio no entran lado a lado.
+                            title: Text(
+                              plan.name,
+                              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${formatSoles(plan.price(_cycle))} '
+                                  '${_cycle == BillingCycle.monthly ? 'al mes' : 'al año'}',
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: ContabiliColors.ink,
+                                  ),
+                                ),
+                                Text('${plan.tagline} Hasta ${plan.maxMembers} personas.'),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ],
+                  ),
+                ),
+                const Text(
+                  'Precios con IGV. No es una suscripción: pagas una vez con Yape o tarjeta y '
+                  'no guardamos tu tarjeta.',
+                  style: TextStyle(color: ContabiliColors.ink2),
+                ),
+                const SizedBox(height: 14),
+                if (owner)
+                  FilledButton(
+                    onPressed: _busy ? null : _pay,
+                    child: Text(
+                      _busy
+                          ? 'Preparando el pago…'
+                          : 'Pagar ${formatSoles(selected.price(_cycle))}',
+                    ),
+                  )
+                else
+                  const Notice(text: 'Solo quien es dueño de la empresa puede pagar el plan.'),
+                if (_message != null) ...[const SizedBox(height: 12), Notice(text: _message!)],
+                if (_waitingPayment) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(onPressed: _checkPayment, child: const Text('Ya pagué')),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
