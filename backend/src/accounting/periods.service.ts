@@ -55,7 +55,7 @@ export class PeriodsService {
 
   /** Cierra el mes 'AAAA-MM' (y todo lo anterior). Lo hace quien registra asientos. */
   async close(companyId: string, actorId: string, period: string): Promise<PeriodsDto> {
-    await this.access.require(companyId, actorId, 'accountant');
+    await this.access.requireWritable(companyId, actorId, 'accountant');
     await this.db.transaction(async (tx) => {
       const previous = await this.lock(tx, companyId);
       const problem = closeProblem({
@@ -90,7 +90,7 @@ export class PeriodsService {
     period: string,
     reason: string,
   ): Promise<PeriodsDto> {
-    await this.access.require(companyId, actorId, 'owner');
+    await this.access.requireWritable(companyId, actorId, 'owner');
     await this.db.transaction(async (tx) => {
       const previous = await this.lock(tx, companyId);
       const target = reopenTarget({ period, closedThrough: previous });

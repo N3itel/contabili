@@ -21,4 +21,41 @@ describe('variables de entorno', () => {
     ).toThrow(/SMS_PROVIDER/);
     expect(() => validateEnv({ ...base, SMS_PROVIDER: 'twilio' })).toThrow(/TWILIO_FROM/);
   });
+
+  it('en producción cobra con Culqi con llaves de producción y por https', () => {
+    const prod = {
+      ...base,
+      NODE_ENV: 'production',
+      AUTH_JWT_SECRET: 's'.repeat(40),
+      SMS_PROVIDER: 'twilio',
+      TWILIO_ACCOUNT_SID: 'AC1',
+      TWILIO_AUTH_TOKEN: 't',
+      TWILIO_FROM: '+15550000000',
+      PUBLIC_WEB_URL: 'https://contabili.pe',
+      COMPANY_LEGAL_NAME: 'Contabili SAC',
+      COMPANY_RUC: '20131312955',
+      SUPPORT_EMAIL: 'soporte@contabili.pe',
+    };
+    expect(() => validateEnv(prod)).toThrow(/PAYMENTS_PROVIDER/);
+    const culqi = {
+      ...prod,
+      PAYMENTS_PROVIDER: 'culqi',
+      CULQI_PUBLIC_KEY: 'pk_test_abc',
+      CULQI_SECRET_KEY: 'sk_test_abc',
+      CULQI_WEBHOOK_SECRET: 'w'.repeat(40),
+    };
+    expect(() => validateEnv(culqi)).toThrow(/producción/);
+    expect(() => validateEnv({ ...culqi, PUBLIC_WEB_URL: 'http://contabili.pe' })).toThrow(/https/);
+    expect(
+      validateEnv({ ...culqi, CULQI_PUBLIC_KEY: 'pk_live_abc', CULQI_SECRET_KEY: 'sk_live_abc' })
+        .PAYMENTS_PROVIDER,
+    ).toBe('culqi');
+  });
+
+  it('las descargas van por https', () => {
+    expect(() => validateEnv({ ...base, DOWNLOAD_WINDOWS_URL: 'http://x.pe/a.exe' })).toThrow();
+    expect(
+      validateEnv({ ...base, DOWNLOAD_WINDOWS_URL: 'https://x.pe/a.exe' }).DOWNLOAD_WINDOWS_URL,
+    ).toBe('https://x.pe/a.exe');
+  });
 });

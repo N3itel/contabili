@@ -6,7 +6,7 @@ import { apiError } from '../common/http.js';
 import { uniqueViolation } from '../common/pg.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
 import { companies, companyInvitations, companyMembers, users } from '../db/schema/index.js';
-import { CompanyAccess } from './company-access.js';
+import { assertLicenseActive, CompanyAccess, memberRoom, planFull } from './company-access.js';
 import {
   INVITATION_TTL_DAYS,
   MAX_PENDING_INVITATIONS,
@@ -103,7 +103,7 @@ export class MembersService {
    * la persona verá la invitación cuando ingrese con él.
    */
   async invite(companyId: string, actorId: string, phoneInput: string, role: MemberRole) {
-    await this.access.require(companyId, actorId, 'owner');
+    await this.access.requireWritable(companyId, actorId, 'owner');
     const phone = normalizePeruMobile(phoneInput);
     if (!phone) {
       throw apiError(
@@ -147,6 +147,9 @@ export class MembersService {
             eq(companyInvitations.status, 'pending'),
           ),
         );
+      // Las invitaciones pendientes también ocupan lugar en el plan.
+      const room = await memberRoom(tx, companyId, await assertLicenseActive(tx, companyId));
+      if (room.members + pending.n >= room.max) throw planFull(room.max);
       if (pending.n >= MAX_PENDING_INVITATIONS) {
         throw apiError(
           HttpStatus.TOO_MANY_REQUESTS,
@@ -265,6 +268,13 @@ export class MembersService {
   async respond(userId: string, invitationId: string, accept: boolean) {
     const now = new Date();
     return this.db.transaction(async (tx) => {
+      // Primero la empresa, como al invitar: así dos transacciones nunca se esperan en cruz.
+      const [target] = await tx
+        .select({ companyId: companyInvitations.companyId })
+        .from(companyInvitations)
+        .where(eq(companyInvitations.id, invitationId));
+      if (!target) throw invitationNotFound();
+      await this.lockCompany(tx, target.companyId);
       const [resolved] = await tx
         .update(companyInvitations)
         .set({ status: accept ? 'accepted' : 'declined', resolvedBy: userId, resolvedAt: now })
@@ -279,6 +289,12 @@ export class MembersService {
         .returning({ companyId: companyInvitations.companyId, role: companyInvitations.role });
       if (!resolved) throw invitationNotFound();
       if (accept) {
+        const room = await memberRoom(
+          tx,
+          resolved.companyId,
+          await assertLicenseActive(tx, resolved.companyId),
+        );
+        if (room.members >= room.max) throw planFull(room.max);
         // Si ya era parte (entró por otra invitación), conserva su rol.
         await tx
           .insert(companyMembers)

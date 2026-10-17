@@ -64,7 +64,7 @@ export class JournalService {
 
   /** Registra un asiento con el siguiente número correlativo del ejercicio. */
   async post(companyId: string, actorId: string, input: NewJournalEntry): Promise<JournalEntryDto> {
-    await this.access.require(companyId, actorId, 'accountant');
+    await this.access.requireWritable(companyId, actorId, 'accountant');
     const id = await this.db.transaction((tx) => this.insert(tx, companyId, actorId, input, null));
     return this.get(companyId, actorId, id);
   }
@@ -79,7 +79,7 @@ export class JournalService {
     entryId: string,
     input: { entryDate?: string; description?: string },
   ): Promise<JournalEntryDto> {
-    await this.access.require(companyId, actorId, 'accountant');
+    await this.access.requireWritable(companyId, actorId, 'accountant');
     const original = await this.get(companyId, actorId, entryId);
     if (original.reversesEntryId) {
       throw apiError(

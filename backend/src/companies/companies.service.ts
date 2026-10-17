@@ -4,7 +4,8 @@ import { parentCode, PCGE_ACCOUNTS } from '../accounting/pcge.js';
 import { audit } from '../common/audit.js';
 import { apiError } from '../common/http.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
-import { accounts, companies, companyMembers } from '../db/schema/index.js';
+import { accounts, companies, companyLicenses, companyMembers } from '../db/schema/index.js';
+import { TRIAL_DAYS, TRIAL_PLAN } from '../billing/plans.js';
 import { isValidRuc } from '../tax/ruc.js';
 import { companyNotFound } from './company-access.js';
 import type { MemberRole } from './roles.js';
@@ -66,6 +67,11 @@ export class CompaniesService {
       await tx
         .insert(companyMembers)
         .values({ companyId: company.id, userId: ownerId, role: 'owner' });
+      await tx.insert(companyLicenses).values({
+        companyId: company.id,
+        plan: TRIAL_PLAN,
+        trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
+      });
 
       const parents = new Set(PCGE_ACCOUNTS.map((a) => parentCode(a.code)));
       const ids = new Map<string, string>();

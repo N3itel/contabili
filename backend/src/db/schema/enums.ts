@@ -24,3 +24,12 @@ export const invitationStatus = pgEnum('invitation_status', [
   'revoked',
   'expired',
 ]);
+
+/** Orden de pago de una licencia. `charging`: hay un cobro en curso con el proveedor. */
+export const orderStatus = pgEnum('order_status', [
+  'pending',
+  'charging',
+  'paid',
+  'failed',
+  'expired',
+]);

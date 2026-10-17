@@ -30,7 +30,31 @@ Guía para quien programe en este repositorio (personas o Claude).
 - Abrir una subcuenta convierte a su madre en cuenta que agrupa; por eso no se divide una cuenta que ya tiene asientos (`parent_has_entries`). Asentar toma un bloqueo compartido de las cuentas y abrir una subcuenta bloquea la madre.
 - El mayor de una cuenta madre suma sus subcuentas. Los saldos van del lado normal de la cuenta (`natureBalance`); el balance de comprobación, en columnas deudor/acreedor (`balanceSides`).
 - Todo lo de una empresa (cuentas, asientos, líneas) lleva `company_id` con claves foráneas compuestas: nada cruza de empresa.
-- RUC con `tax/ruc.ts` (dígito verificador módulo 11).
+- RUC con `tax/ruc.ts` (dígito verificador módulo 11). El RUC no es único entre empresas (el dueño y su estudio contable pueden llevar cada uno la suya), pero una persona no tiene dos empresas con el mismo RUC (`ruc_already_yours`).
+- Cierre mensual (`period-rules.ts`): `companies.closed_through` es la fecha hasta la que los libros están cerrados; cerrar un mes cierra lo anterior y solo se cierra un mes ya terminado. Reabrir es del dueño, con motivo, y queda en `period_closings`. La base rechaza asientos con fecha cerrada (trigger `journal_entries_open_period`).
+
+## Facilidad de uso
+
+- La meta: que un dueño sin experiencia lleve su contabilidad. Cada pantalla y cada mensaje se escriben para esa persona: sin «debe», «haber» ni códigos de cuenta salvo en las vistas del contador.
+- Las operaciones fáciles (`accounting/operations.ts`) arman el asiento a partir de «vendí», «gasté», «cobré» o «pagué» y devuelven `explanation`, lo que se registró en palabras simples. El IGV va según el régimen: el Nuevo RUS no lo separa ni usa crédito fiscal; un gasto solo descuenta IGV con factura y si es de mercadería, servicios u otros.
+- El resumen (`summary-rules.ts`) habla de plata, por cobrar, por pagar, IGV y resultado del mes; el resultado es aproximado (sin costo de ventas) y así se dice.
+- Los mensajes de error dicen qué hacer, no solo qué falló («Usa una fecha posterior o pide al dueño que reabra el mes»).
+
+## Licencias y cobros
+
+- La licencia es por empresa (`company_licenses`): nace con 30 días de prueba del plan Negocio; los planes y precios viven en `billing/plans.ts` (provisionales, con IGV).
+- Vencida, la empresa queda en solo lectura: las escrituras usan `CompanyAccess.requireWritable()` y responden 402 `license_expired`; leer y pagar siempre se puede. Nunca se borran datos por falta de pago.
+- Personas por plan: invitar y aceptar respetan `maxMembers` (las invitaciones pendientes también cuentan). Bajar a un plan donde no entra el equipo no se puede (`plan_too_small`), ni cambiar de plan con un periodo pagado corriendo (`plan_change_while_paid`).
+- Cobro como en Taxinka: el monto lo fija el servidor; la página `/pagar/<orden>#t=<código>` lleva el código en el fragmento; la tarjeta o Yape van al checkout de Culqi. La licencia se extiende solo cuando Culqi confirma el cargo (respuesta del cobro o webhook que consulta el cargo, nunca cree el cuerpo), una vez por orden (escritura condicional e índice único por cargo). Un pago empieza cuando termina lo que ya había (prueba o periodo pagado).
+- Una orden nueva reemplaza a las pendientes; con un cobro en curso no se crea otra. 4 intentos por orden (3DS no gasta), 10 órdenes por empresa al día, vencen a los 30 min.
+- Nunca registres el cuerpo de las respuestas de Culqi. Sin llaves se usa el proveedor de prueba; en producción, llaves `live`.
+
+## Sitio público
+
+- Lo sirve el backend fuera de `/api/v1` (`web/`, lista en `main-prefix.ts`): páginas fijas con CSP por hash, sin cookies ni recursos externos (salvo Culqi en `/pagar`). Nada de atributos `style=""`: la CSP los bloquea; usa clases (una prueba lo revisa).
+- Los precios del sitio salen de `PLANS`; las descargas, de las variables `DOWNLOAD_*` y `APP_*`: solo se muestran las publicadas, nunca botones vacíos.
+- `/mi-plan` ingresa con SMS y guarda la sesión solo en memoria; al ir a pagar la cierra.
+- `/terminos` y `/privacidad` son borradores para revisión legal: al cambiarlos, sube `TERMS_VERSION`.
 
 ## Base de datos
 

@@ -50,6 +50,20 @@
       "when": 1792277144817,
       "tag": "0006_ruc_no_unico",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792277470795,
+      "tag": "0007_licencias",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792277471709,
+      "tag": "0008_licencias_existentes",
+      "breakpoints": true
     }
   ]
 }

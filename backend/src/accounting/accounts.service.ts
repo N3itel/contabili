@@ -53,7 +53,7 @@ export class AccountsService {
     actorId: string,
     input: { code: string; name: string; nature?: AccountNature },
   ): Promise<AccountDto> {
-    await this.access.require(companyId, actorId, 'accountant');
+    await this.access.requireWritable(companyId, actorId, 'accountant');
     if (!isValidAccountCode(input.code)) {
       throw apiError(
         HttpStatus.BAD_REQUEST,

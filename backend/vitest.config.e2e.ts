@@ -14,6 +14,12 @@ export default defineConfig({
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
     fileParallelism: false,
-    env: { NODE_ENV: 'test', SMS_PROVIDER: 'memory' },
+    env: {
+      NODE_ENV: 'test',
+      SMS_PROVIDER: 'memory',
+      PAYMENTS_PROVIDER: 'fake',
+      CULQI_WEBHOOK_SECRET: 'webhook-de-culqi-solo-para-pruebas-e2e-0123',
+      PUBLIC_WEB_URL: 'https://contabili.test',
+    },
   },
 });
