@@ -27,11 +27,16 @@ import type { Cents } from './money.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
+export type EntrySource =
+  'manual' | 'sale' | 'expense' | 'collection' | 'payment' | 'tax_payment' | 'reversal';
+
 export interface NewJournalEntry {
   /** 'AAAA-MM-DD', fecha de Lima. */
   entryDate: string;
   description: string;
   lines: readonly JournalLineInput[];
+  /** Quién lo armó: el contador a mano o una operación fácil. */
+  source?: EntrySource;
 }
 
 export interface JournalEntryDto {
@@ -40,6 +45,7 @@ export interface JournalEntryDto {
   number: number;
   entryDate: string;
   description: string;
+  source: EntrySource;
   /** Asiento que este extorna, si es un extorno. */
   reversesEntryId: string | null;
   /** Extorno que anuló este asiento, si lo hubo. */
@@ -124,7 +130,7 @@ export class JournalService {
           tx,
           companyId,
           actorId,
-          { entryDate, description, lines },
+          { entryDate, description, lines, source: 'reversal' },
           entryId,
         );
         await audit(tx, {
@@ -253,6 +259,7 @@ export class JournalService {
         number,
         entryDate: input.entryDate,
         description: input.description,
+        source: input.source ?? 'manual',
         reversesEntryId,
         createdBy: actorId,
       })
@@ -284,6 +291,7 @@ export class JournalService {
         number: journalEntries.number,
         entryDate: journalEntries.entryDate,
         description: journalEntries.description,
+        source: journalEntries.source,
         reversesEntryId: journalEntries.reversesEntryId,
         reversedByEntryId: reversal.id,
         createdById: users.id,
@@ -322,7 +330,7 @@ export class JournalService {
     const byEntry = new Map<string, typeof lines>();
     for (const l of lines) byEntry.set(l.entryId, [...(byEntry.get(l.entryId) ?? []), l]);
 
-    return entries.map(({ createdById, createdByName, ...e }) => {
+    return entries.map(({ createdById, createdByName, source, ...e }) => {
       const entryLines = (byEntry.get(e.id) ?? []).map((l) => ({
         lineNo: l.lineNo,
         accountCode: l.accountCode,
@@ -333,6 +341,7 @@ export class JournalService {
       }));
       return {
         ...e,
+        source: source as EntrySource,
         createdBy: { id: createdById, fullName: createdByName },
         lines: entryLines,
         totals: {

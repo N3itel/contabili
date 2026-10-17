@@ -60,6 +60,7 @@ export class OperationsService {
         ? `${built.description} · ${input.reference}`
         : built.description,
       lines: built.lines,
+      source: input.operation.type,
     });
     return { entry, explanation: built.explanation };
   }

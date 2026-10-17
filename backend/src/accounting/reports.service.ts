@@ -9,6 +9,14 @@ import { periodRange } from './lima.js';
 import type { Cents } from './money.js';
 import type { AccountNature } from './pcge.js';
 import { buildSummary, type FinanceSummary } from './summary-rules.js';
+import { companies } from '../db/schema/index.js';
+import {
+  type MonthFlows,
+  monthlyTaxes,
+  type MonthlyTaxes,
+  type Regime,
+} from '../tax/monthly-taxes.js';
+import { trendMonths, type TrendPoint } from './trend-rules.js';
 
 /** Movimientos por consulta del mayor; los totales y el saldo final cubren todo el rango. */
 export const LEDGER_MAX_MOVEMENTS = 1000;
@@ -203,5 +211,75 @@ export class ReportsService {
       .where(and(eq(journalLines.companyId, companyId), toDate))
       .groupBy(accounts.code);
     return { period, asOf, ...buildSummary(rows) };
+  }
+
+  /** Ventas y gastos por mes (sin IGV), de todos los meses hasta `to` (AAAA-MM). */
+  private async monthlyFlows(
+    companyId: string,
+    toPeriod: string,
+  ): Promise<(MonthFlows & { expenses: number })[]> {
+    const month = sql<string>`to_char(${journalEntries.entryDate}, 'YYYY-MM')`;
+    const code = accounts.code;
+    const isTaxPayment = sql`${journalEntries.source} = 'tax_payment'`;
+    const rows = await this.db
+      .select({
+        period: month,
+        netSales:
+          sql<number>`coalesce(sum(case when ${code} like '70%' then ${journalLines.creditCents} - ${journalLines.debitCents} else 0 end), 0)`.mapWith(
+            Number,
+          ),
+        expenses:
+          sql<number>`coalesce(sum(case when ${code} ~ '^6[0-8]' then ${journalLines.debitCents} - ${journalLines.creditCents} else 0 end), 0)`.mapWith(
+            Number,
+          ),
+        igvSales:
+          sql<number>`coalesce(sum(case when ${code} = '40111' then ${journalLines.creditCents} else 0 end), 0)`.mapWith(
+            Number,
+          ),
+        igvPurchases:
+          sql<number>`coalesce(sum(case when ${code} = '40111' and not (${isTaxPayment}) then ${journalLines.debitCents} else 0 end), 0)`.mapWith(
+            Number,
+          ),
+      })
+      .from(journalLines)
+      .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+      .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+      .where(and(eq(journalLines.companyId, companyId), sql`${month} <= ${toPeriod}`))
+      .groupBy(month)
+      .orderBy(month);
+    return rows;
+  }
+
+  /** Lo que toca pagar a SUNAT en el mes 'AAAA-MM', estimado con lo registrado. */
+  async taxes(companyId: string, actorId: string, period: string): Promise<MonthlyTaxes> {
+    await this.access.require(companyId, actorId, 'viewer');
+    const [company] = await this.db
+      .select({ regime: companies.taxRegime })
+      .from(companies)
+      .where(eq(companies.id, companyId));
+    const months = await this.monthlyFlows(companyId, period);
+    // El mes pedido va siempre al final, aunque no tenga movimientos.
+    const flows = months.filter((m) => m.period < period);
+    flows.push(
+      months.find((m) => m.period === period) ?? {
+        period,
+        netSales: 0,
+        expenses: 0,
+        igvSales: 0,
+        igvPurchases: 0,
+      },
+    );
+    return monthlyTaxes(company.regime as Regime, flows);
+  }
+
+  /** Ventas y gastos (sin IGV) de los últimos `count` meses hasta `toPeriod`. */
+  async trend(
+    companyId: string,
+    actorId: string,
+    toPeriod: string,
+    count: number,
+  ): Promise<TrendPoint[]> {
+    await this.access.require(companyId, actorId, 'viewer');
+    return trendMonths(await this.monthlyFlows(companyId, toPeriod), toPeriod, count);
   }
 }

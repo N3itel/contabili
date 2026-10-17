@@ -91,6 +91,11 @@ export const journalEntries = pgTable(
     description: varchar('description', { length: 300 }).notNull(),
     /** Extorno: el asiento que este anula. Cada asiento se extorna una sola vez. */
     reversesEntryId: uuid('reverses_entry_id'),
+    /**
+     * De dónde salió: `manual` (asiento del contador) o la operación fácil que
+     * lo armó. Distingue, por ejemplo, un pago de IGV a SUNAT de una compra.
+     */
+    source: varchar('source', { length: 16 }).notNull().default('manual'),
     /** Quién lo registró. */
     createdBy: uuid('created_by')
       .notNull()
@@ -110,6 +115,10 @@ export const journalEntries = pgTable(
     index('journal_entries_date_idx').on(t.companyId, t.entryDate),
     check('journal_entries_number_positive', sql`${t.number} > 0`),
     check('journal_entries_not_self_reversal', sql`${t.reversesEntryId} <> ${t.id}`),
+    check(
+      'journal_entries_source',
+      sql`${t.source} IN ('manual', 'sale', 'expense', 'collection', 'payment', 'tax_payment', 'reversal')`,
+    ),
     check('journal_entries_fiscal_year', sql`${t.fiscalYear} = extract(year from ${t.entryDate})`),
   ],
 );

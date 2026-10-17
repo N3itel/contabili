@@ -103,6 +103,8 @@ describe('operaciones fáciles', () => {
       { type: 'expense', total: 12345, category: 'other', paidWith: 'credit', withInvoice: true },
       { type: 'collection', total: 7, into: 'cash' },
       { type: 'payment', total: 7, from: 'bank' },
+      { type: 'tax_payment', total: 900, tax: 'igv', from: 'bank' },
+      { type: 'tax_payment', total: 300, tax: 'income', from: 'cash' },
     ];
     for (const op of ops) {
       for (const ctx of [rmt, nrus]) expect(checkJournal(buildOperation(op, ctx).lines)).toBeNull();
@@ -152,5 +154,24 @@ describe('cliente o proveedor', () => {
       }),
     ).toBe('supplier');
     expect(operationContactKind({ type: 'payment', total: 1, from: 'cash' })).toBe('supplier');
+  });
+});
+
+describe('pago de impuestos', () => {
+  it('el IGV pagado baja la deuda con SUNAT', () => {
+    const op = buildOperation({ type: 'tax_payment', total: 900, tax: 'igv', from: 'bank' }, rmt);
+    expect(op.lines).toEqual([
+      { accountCode: '40111', debit: 900, credit: 0 },
+      { accountCode: '1041', debit: 0, credit: 900 },
+    ]);
+    expect(op.description).toBe('Pago de IGV a SUNAT');
+  });
+
+  it('el pago a cuenta va al impuesto a la renta', () => {
+    const op = buildOperation(
+      { type: 'tax_payment', total: 300, tax: 'income', from: 'cash' },
+      nrus,
+    );
+    expect(op.lines[0]).toEqual({ accountCode: '4017', debit: 300, credit: 0 });
   });
 });

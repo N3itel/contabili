@@ -1,0 +1,2 @@
+ALTER TABLE "journal_entries" ADD COLUMN "source" varchar(16) DEFAULT 'manual' NOT NULL;--> statement-breakpoint
+ALTER TABLE "journal_entries" ADD CONSTRAINT "journal_entries_source" CHECK ("journal_entries"."source" IN ('manual', 'sale', 'expense', 'collection', 'payment', 'tax_payment', 'reversal'));

@@ -67,6 +67,12 @@ const operationBody = z.object({
     }),
     z.object({ type: z.literal('collection'), total, into: money }),
     z.object({ type: z.literal('payment'), total, from: money }),
+    z.object({
+      type: z.literal('tax_payment'),
+      total,
+      tax: z.enum(['igv', 'income']),
+      from: money,
+    }),
   ]),
   date: date.optional(),
   reference: z.string().trim().min(1).max(40).optional(),
@@ -75,6 +81,7 @@ const operationBody = z.object({
 });
 
 const summaryQuery = z.object({ period: period.optional() });
+const trendQuery = z.object({ months: z.coerce.number().int().min(1).max(24).default(6) });
 
 const journalQuery = z.object({
   period,
@@ -111,6 +118,35 @@ export class AccountingController {
     @Body(new ZodPipe(operationBody)) body: z.infer<typeof operationBody>,
   ) {
     return this.operations.record(companyId, auth.userId, body);
+  }
+
+  /** Lo que toca pagar a SUNAT en el mes (estimado). */
+  @Get('taxes')
+  taxes(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Query(new ZodPipe(summaryQuery)) query: z.infer<typeof summaryQuery>,
+  ) {
+    return this.reports.taxes(
+      companyId,
+      auth.userId,
+      query.period ?? limaDate(new Date()).slice(0, 7),
+    );
+  }
+
+  /** Ventas y gastos de los últimos meses, para el gráfico de Inicio. */
+  @Get('trend')
+  trend(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Query(new ZodPipe(trendQuery)) query: z.infer<typeof trendQuery>,
+  ) {
+    return this.reports.trend(
+      companyId,
+      auth.userId,
+      limaDate(new Date()).slice(0, 7),
+      query.months,
+    );
   }
 
   /** Cómo va el negocio este mes, sin términos contables. */

@@ -29,7 +29,9 @@ export type Operation =
   /** Un cliente pagó lo que debía. */
   | { type: 'collection'; total: Cents; into: Money }
   /** Se pagó a un proveedor lo que se le debía. */
-  | { type: 'payment'; total: Cents; from: Money };
+  | { type: 'payment'; total: Cents; from: Money }
+  /** Se pagó a SUNAT el IGV o el pago a cuenta de la renta. */
+  | { type: 'tax_payment'; total: Cents; tax: 'igv' | 'income'; from: Money };
 
 export interface OperationContext {
   taxRegime: TaxRegime;
@@ -53,6 +55,8 @@ export function operationContactKind(op: Operation): 'customer' | 'supplier' | n
       return op.paidWith === 'credit' ? 'supplier' : null;
     case 'payment':
       return 'supplier';
+    case 'tax_payment':
+      return null;
   }
 }
 
@@ -71,6 +75,7 @@ export const OPERATION_ACCOUNTS = {
   receivable: '1212',
   payable: '4212',
   igv: '40111',
+  incomeTax: '4017',
   sale: { goods: '7011', services: '704' },
   expense: {
     goods: '601',
@@ -211,6 +216,18 @@ function build(op: Operation, ctx: OperationContext): BuiltOperation {
         ],
         description: 'Pago a proveedor',
         explanation: `Pagaste ${soles(op.total)} de lo que le debías a un proveedor.`,
+      };
+    case 'tax_payment':
+      return {
+        lines: [
+          debit(op.tax === 'igv' ? OPERATION_ACCOUNTS.igv : OPERATION_ACCOUNTS.incomeTax, op.total),
+          credit(moneyAccount(op.from, ctx), op.total),
+        ],
+        description: op.tax === 'igv' ? 'Pago de IGV a SUNAT' : 'Pago a cuenta de renta a SUNAT',
+        explanation:
+          op.tax === 'igv'
+            ? `Pagaste ${soles(op.total)} de IGV a SUNAT: ya no lo debes.`
+            : `Pagaste ${soles(op.total)} a cuenta de tu impuesto a la renta.`,
       };
   }
 }

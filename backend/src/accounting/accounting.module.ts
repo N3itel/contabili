@@ -4,6 +4,8 @@ import { AccountingController } from './accounting.controller.js';
 import { AccountsService } from './accounts.service.js';
 import { ContactsController } from './contacts.controller.js';
 import { ContactsService } from './contacts.service.js';
+import { ExportDownloadController, ExportLinksController } from './exports.controller.js';
+import { ExportsService } from './exports.service.js';
 import { JournalService } from './journal.service.js';
 import { OperationsService } from './operations.service.js';
 import { PeriodsService } from './periods.service.js';
@@ -11,7 +13,12 @@ import { ReportsService } from './reports.service.js';
 
 @Module({
   imports: [CompaniesModule],
-  controllers: [AccountingController, ContactsController],
+  controllers: [
+    AccountingController,
+    ContactsController,
+    ExportLinksController,
+    ExportDownloadController,
+  ],
   providers: [
     AccountsService,
     JournalService,
@@ -19,6 +26,7 @@ import { ReportsService } from './reports.service.js';
     PeriodsService,
     OperationsService,
     ContactsService,
+    ExportsService,
   ],
   exports: [JournalService],
 })
