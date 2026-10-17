@@ -1,0 +1,17 @@
+# Dependencias y compilados
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secretos locales (usa .env.example como plantilla)
+.env
+.env.*
+!.env.example
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
