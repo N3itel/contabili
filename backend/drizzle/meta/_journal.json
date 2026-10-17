@@ -29,6 +29,27 @@
       "when": 1792276473831,
       "tag": "0003_company_has_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792277039028,
+      "tag": "0004_cierre_de_periodos",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792277039962,
+      "tag": "0005_journal_open_period",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792277144817,
+      "tag": "0006_ruc_no_unico",
+      "breakpoints": true
     }
   ]
 }

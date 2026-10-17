@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
+import { API_PREFIX, PREFIX_EXCLUDE } from './main-prefix.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -8,6 +9,7 @@ async function bootstrap() {
   // Sin esto, el tope de códigos por IP trataría a todos los usuarios como uno solo.
   const hops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
   if (hops > 0) app.set('trust proxy', hops);
+  app.setGlobalPrefix(API_PREFIX, { exclude: PREFIX_EXCLUDE });
   app.enableShutdownHooks();
   await app.listen(process.env.PORT ?? 3000);
 }

@@ -1,12 +1,14 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, like, sql, type SQL } from 'drizzle-orm';
+import { and, type AnyColumn, asc, eq, like, sql, type SQL } from 'drizzle-orm';
 import { apiError } from '../common/http.js';
 import { CompanyAccess } from '../companies/company-access.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
 import { accounts, journalEntries, journalLines } from '../db/schema/index.js';
 import { balanceSides, natureBalance, runningBalances } from './balances.js';
+import { periodRange } from './lima.js';
 import type { Cents } from './money.js';
 import type { AccountNature } from './pcge.js';
+import { buildSummary, type FinanceSummary } from './summary-rules.js';
 
 /** Movimientos por consulta del mayor; los totales y el saldo final cubren todo el rango. */
 export const LEDGER_MAX_MOVEMENTS = 1000;
@@ -168,5 +170,38 @@ export class ReportsService {
       { debit: 0, credit: 0, debitBalance: 0, creditBalance: 0 },
     );
     return { from, to, rows, totals };
+  }
+
+  /**
+   * Resumen de finanzas del mes 'AAAA-MM': saldos a la fecha (hoy o el fin del
+   * mes, lo que sea antes) y ventas y gastos del mes.
+   */
+  async summary(
+    companyId: string,
+    actorId: string,
+    period: string,
+    today: string,
+  ): Promise<FinanceSummary & { period: string; asOf: string }> {
+    await this.access.require(companyId, actorId, 'viewer');
+    const { from, to } = periodRange(period);
+    const asOf = to < today ? to : today;
+    const toDate = sql`${journalEntries.entryDate} <= ${asOf}`;
+    const inPeriod = sql`${journalEntries.entryDate} BETWEEN ${from} AND ${asOf}`;
+    const sumIf = (column: AnyColumn, cond: SQL) =>
+      sql<number>`coalesce(sum(${column}) filter (where ${cond}), 0)`.mapWith(Number);
+    const rows = await this.db
+      .select({
+        code: accounts.code,
+        debitToDate: sumIf(journalLines.debitCents, toDate),
+        creditToDate: sumIf(journalLines.creditCents, toDate),
+        debitInPeriod: sumIf(journalLines.debitCents, inPeriod),
+        creditInPeriod: sumIf(journalLines.creditCents, inPeriod),
+      })
+      .from(journalLines)
+      .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+      .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+      .where(and(eq(journalLines.companyId, companyId), toDate))
+      .groupBy(accounts.code);
+    return { period, asOf, ...buildSummary(rows) };
   }
 }

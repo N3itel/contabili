@@ -12,7 +12,7 @@ describe('GET /health (e2e)', () => {
   });
 
   it('responde 200 sin sesión si la base responde', async () => {
-    const res = await t.http.get('/health').expect(200);
+    const res = await t.web.get('/health').expect(200);
     expect(res.body).toEqual({ status: 'ok', database: 'ok' });
   });
 });

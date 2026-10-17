@@ -15,7 +15,7 @@ import {
   MIN_ENTRY_YEAR,
   reverseLines,
 } from './journal-rules.js';
-import { isValidDate, limaDate, periodRange } from './lima.js';
+import { formatDate, isValidDate, limaDate, periodRange } from './lima.js';
 import type { Cents } from './money.js';
 
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -171,12 +171,20 @@ export class JournalService {
     assertValidEntry(input);
     const fiscalYear = Number(input.entryDate.slice(0, 4));
 
-    // Bloquea la empresa: dos asientos a la vez no se llevan el mismo número.
-    await tx
-      .select({ id: companies.id })
+    // Bloquea la empresa: dos asientos a la vez no se llevan el mismo número
+    // y un cierre de periodo espera a que termine.
+    const [company] = await tx
+      .select({ closedThrough: companies.closedThrough })
       .from(companies)
       .where(eq(companies.id, companyId))
       .for('update');
+    if (company.closedThrough && input.entryDate <= company.closedThrough) {
+      throw apiError(
+        HttpStatus.CONFLICT,
+        'period_closed',
+        `Los libros están cerrados hasta el ${formatDate(company.closedThrough)}. Usa una fecha posterior o pide al dueño que reabra el mes.`,
+      );
+    }
 
     const codes = [...new Set(input.lines.map((l) => l.accountCode))];
     // Bloqueo compartido: nadie convierte estas cuentas en madres mientras se asienta.

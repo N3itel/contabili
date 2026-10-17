@@ -42,7 +42,7 @@ describe('empresas y permisos (e2e)', () => {
     expect(list.body.map((c: { id: string }) => c.id)).toContain(res.body.id);
   });
 
-  it('rechaza un RUC inválido o repetido', async () => {
+  it('rechaza un RUC inválido o uno que ya es tuyo', async () => {
     const bad = await t.http
       .post('/companies')
       .set(owner.auth)
@@ -60,7 +60,14 @@ describe('empresas y permisos (e2e)', () => {
       .set(owner.auth)
       .send({ ruc, legalName: 'Segunda SAC', taxRegime: 'general' })
       .expect(409);
-    expect(dup.body.code).toBe('ruc_taken');
+    expect(dup.body.code).toBe('ruc_already_yours');
+    // Otra persona (su estudio contable) sí puede llevar el mismo RUC.
+    const accountant = await signUp(t);
+    await t.http
+      .post('/companies')
+      .set(accountant.auth)
+      .send({ ruc, legalName: 'Primera SAC', taxRegime: 'general' })
+      .expect(201);
   });
 
   it('quien no es parte no ve la empresa (como si no existiera)', async () => {

@@ -33,3 +33,9 @@ export function periodRange(period: string): { from: string; to: string } {
   const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
   return { from: `${period}-01`, to: `${period}-${String(last).padStart(2, '0')}` };
 }
+
+/** Para mostrar: '2026-03-31' → '31/03/2026'. */
+export function formatDate(date: string): string {
+  const [y, m, d] = date.split('-');
+  return `${d}/${m}/${y}`;
+}

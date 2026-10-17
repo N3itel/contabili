@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { type AuthContext, CurrentAuth } from '../auth/auth.guard.js';
 import { apiError, uuidParam, ZodPipe } from '../common/http.js';
@@ -6,6 +16,8 @@ import { AccountsService } from './accounts.service.js';
 import { MAX_LINES_PER_ENTRY } from './journal-rules.js';
 import { JournalService } from './journal.service.js';
 import { isValidDate, limaDate } from './lima.js';
+import { OperationsService } from './operations.service.js';
+import { PeriodsService } from './periods.service.js';
 import { ReportsService } from './reports.service.js';
 
 const date = z.string().refine(isValidDate, 'Usa el formato AAAA-MM-DD');
@@ -31,8 +43,40 @@ const entryBody = z.object({
 
 const reverseBody = z.object({ entryDate: date.optional(), description: description.optional() });
 
+const period = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Usa el formato AAAA-MM');
+const closeBody = z.object({ period });
+const reopenBody = z.object({ period, reason: z.string().trim().min(10).max(300) });
+
+const total = z.number().int().min(1).max(10_000_000_000_000);
+const money = z.enum(['cash', 'bank']);
+const settlement = z.enum(['cash', 'bank', 'credit']);
+const operationBody = z.object({
+  operation: z.discriminatedUnion('type', [
+    z.object({
+      type: z.literal('sale'),
+      total,
+      kind: z.enum(['goods', 'services']),
+      paidWith: settlement,
+    }),
+    z.object({
+      type: z.literal('expense'),
+      total,
+      category: z.enum(['goods', 'services', 'payroll', 'taxes', 'financial', 'other']),
+      paidWith: settlement,
+      withInvoice: z.boolean(),
+    }),
+    z.object({ type: z.literal('collection'), total, into: money }),
+    z.object({ type: z.literal('payment'), total, from: money }),
+  ]),
+  date: date.optional(),
+  reference: z.string().trim().min(1).max(40).optional(),
+  moneyAccountCode: accountCode.optional(),
+});
+
+const summaryQuery = z.object({ period: period.optional() });
+
 const journalQuery = z.object({
-  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Usa el formato AAAA-MM'),
+  period,
   after: z.coerce.number().int().min(0).optional(),
 });
 
@@ -54,7 +98,55 @@ export class AccountingController {
     @Inject(AccountsService) private readonly accounts: AccountsService,
     @Inject(JournalService) private readonly journal: JournalService,
     @Inject(ReportsService) private readonly reports: ReportsService,
+    @Inject(PeriodsService) private readonly periods: PeriodsService,
+    @Inject(OperationsService) private readonly operations: OperationsService,
   ) {}
+
+  /** «Vendí», «gasté», «cobré», «pagué»: el asiento se arma solo. */
+  @Post('operations')
+  recordOperation(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Body(new ZodPipe(operationBody)) body: z.infer<typeof operationBody>,
+  ) {
+    return this.operations.record(companyId, auth.userId, body);
+  }
+
+  /** Cómo va el negocio este mes, sin términos contables. */
+  @Get('summary')
+  summary(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Query(new ZodPipe(summaryQuery)) query: z.infer<typeof summaryQuery>,
+  ) {
+    const today = limaDate(new Date());
+    return this.reports.summary(companyId, auth.userId, query.period ?? today.slice(0, 7), today);
+  }
+
+  @Get('periods')
+  getPeriods(@CurrentAuth() auth: AuthContext, @Param('companyId', uuidParam()) companyId: string) {
+    return this.periods.get(companyId, auth.userId);
+  }
+
+  @Post('periods/close')
+  @HttpCode(HttpStatus.OK)
+  closePeriod(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Body(new ZodPipe(closeBody)) body: z.infer<typeof closeBody>,
+  ) {
+    return this.periods.close(companyId, auth.userId, body.period);
+  }
+
+  @Post('periods/reopen')
+  @HttpCode(HttpStatus.OK)
+  reopenPeriod(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Body(new ZodPipe(reopenBody)) body: z.infer<typeof reopenBody>,
+  ) {
+    return this.periods.reopen(companyId, auth.userId, body.period, body.reason);
+  }
 
   @Get('accounts')
   listAccounts(

@@ -17,17 +17,29 @@ import { createdAt, id } from './columns.js';
 import { accountNature, taxRegime } from './enums.js';
 import { users } from './users.js';
 
-/** Empresa que lleva su contabilidad en Contabili, identificada por su RUC. */
+/**
+ * Empresa que lleva su contabilidad en Contabili, identificada por su RUC. El
+ * RUC no es único: el dueño y su estudio contable pueden llevar cada uno la
+ * suya, y nadie bloquea a una empresa registrando su RUC antes.
+ */
 export const companies = pgTable(
   'companies',
   {
     id: id(),
-    ruc: varchar('ruc', { length: 11 }).notNull().unique('companies_ruc_uq'),
+    ruc: varchar('ruc', { length: 11 }).notNull(),
     legalName: varchar('legal_name', { length: 200 }).notNull(),
     taxRegime: taxRegime('tax_regime').notNull(),
+    /**
+     * Libros cerrados hasta esta fecha (inclusive): no se registran asientos
+     * con fecha igual o anterior (trigger `journal_entries_open_period`).
+     */
+    closedThrough: date('closed_through'),
     createdAt: createdAt(),
   },
-  (t) => [check('companies_ruc_format', sql`${t.ruc} ~ '^(10|15|16|17|20)[0-9]{9}$'`)],
+  (t) => [
+    index('companies_ruc_idx').on(t.ruc),
+    check('companies_ruc_format', sql`${t.ruc} ~ '^(10|15|16|17|20)[0-9]{9}$'`),
+  ],
 );
 
 /** Plan de cuentas de cada empresa (PCGE y las subcuentas que abra). */
@@ -131,5 +143,35 @@ export const journalLines = pgTable(
       sql`(${t.debitCents} > 0 AND ${t.creditCents} = 0) OR (${t.creditCents} > 0 AND ${t.debitCents} = 0)`,
     ),
     check('journal_lines_line_no', sql`${t.lineNo} BETWEEN 1 AND 200`),
+  ],
+);
+
+/** Historial de cierres y reaperturas: quién, cuándo, hasta qué fecha y por qué. */
+export const periodClosings = pgTable(
+  'period_closings',
+  {
+    id: id(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    action: varchar('action', { length: 8 }).notNull(),
+    /** Fecha de cierre antes y después del cambio (null: nada cerrado). */
+    previousClosedThrough: date('previous_closed_through'),
+    closedThrough: date('closed_through'),
+    /** Reabrir exige decir por qué. */
+    reason: varchar('reason', { length: 300 }),
+    actorId: uuid('actor_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('period_closings_company_idx').on(t.companyId, t.createdAt),
+    check('period_closings_action', sql`${t.action} IN ('close', 'reopen')`),
+    check('period_closings_reopen_reason', sql`${t.action} <> 'reopen' OR ${t.reason} IS NOT NULL`),
+    check(
+      'period_closings_close_date',
+      sql`${t.action} <> 'close' OR ${t.closedThrough} IS NOT NULL`,
+    ),
   ],
 );

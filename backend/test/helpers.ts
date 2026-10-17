@@ -7,11 +7,17 @@ import { CODE_LIMITER } from '../src/auth/auth.controller.js';
 import { type MemorySmsSender, SMS_SENDER } from '../src/auth/sms.js';
 import { RateLimiter } from '../src/common/http.js';
 import { DRIZZLE, type Database } from '../src/db/db.module.js';
+import { API_PREFIX, PREFIX_EXCLUDE } from '../src/main-prefix.js';
 import { rucCheckDigit } from '../src/tax/ruc.js';
+
+type Agent = ReturnType<typeof request>;
 
 export interface TestApp {
   app: INestApplication;
-  http: ReturnType<typeof request>;
+  /** La API: `t.http.get('/companies')` pide /api/v1/companies. */
+  http: Pick<Agent, 'get' | 'post' | 'patch' | 'delete'>;
+  /** Las páginas del sitio, sin prefijo. */
+  web: Agent;
   sms: MemorySmsSender;
   db: Database;
 }
@@ -23,11 +29,20 @@ export async function createTestApp(): Promise<TestApp> {
     .useValue(new RateLimiter(1_000_000, 3600_000))
     .compile();
   const app = moduleRef.createNestApplication();
+  app.setGlobalPrefix(API_PREFIX, { exclude: PREFIX_EXCLUDE });
   app.enableShutdownHooks();
   await app.init();
+  const web = request(app.getHttpServer());
+  const api = (path: string) => `/${API_PREFIX}${path}`;
   return {
     app,
-    http: request(app.getHttpServer()),
+    http: {
+      get: (path: string) => web.get(api(path)),
+      post: (path: string) => web.post(api(path)),
+      patch: (path: string) => web.patch(api(path)),
+      delete: (path: string) => web.delete(api(path)),
+    },
+    web,
     sms: app.get(SMS_SENDER),
     db: app.get(DRIZZLE),
   };

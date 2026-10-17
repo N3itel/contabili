@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { parentCode, PCGE_ACCOUNTS } from '../accounting/pcge.js';
 import { audit } from '../common/audit.js';
 import { apiError } from '../common/http.js';
@@ -22,6 +22,8 @@ export interface CompanyDto {
   ruc: string;
   legalName: string;
   taxRegime: TaxRegime;
+  /** Libros cerrados hasta esta fecha (inclusive). */
+  closedThrough: string | null;
   /** Tu rol en la empresa. */
   role: MemberRole;
 }
@@ -31,6 +33,7 @@ const companyColumns = {
   ruc: companies.ruc,
   legalName: companies.legalName,
   taxRegime: companies.taxRegime,
+  closedThrough: companies.closedThrough,
   role: companyMembers.role,
 };
 
@@ -44,14 +47,22 @@ export class CompaniesService {
       throw apiError(HttpStatus.BAD_REQUEST, 'invalid_ruc', 'El RUC no es válido.');
     }
     return this.db.transaction(async (tx) => {
-      const [company] = await tx
-        .insert(companies)
-        .values(input)
-        .onConflictDoNothing()
-        .returning({ id: companies.id });
-      if (!company) {
-        throw apiError(HttpStatus.CONFLICT, 'ruc_taken', 'Ya hay una empresa con ese RUC.');
+      // Una persona a la vez: dos pedidos iguales no crean la empresa dos veces.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`company:${ownerId}`}))`);
+      const [mine] = await tx
+        .select({ id: companies.id })
+        .from(companyMembers)
+        .innerJoin(companies, eq(companies.id, companyMembers.companyId))
+        .where(and(eq(companyMembers.userId, ownerId), eq(companies.ruc, input.ruc)));
+      if (mine) {
+        throw apiError(
+          HttpStatus.CONFLICT,
+          'ruc_already_yours',
+          'Ya tienes una empresa con ese RUC.',
+          { companyId: mine.id },
+        );
       }
+      const [company] = await tx.insert(companies).values(input).returning({ id: companies.id });
       await tx
         .insert(companyMembers)
         .values({ companyId: company.id, userId: ownerId, role: 'owner' });
@@ -80,7 +91,7 @@ export class CompaniesService {
         entity: 'company',
         entityId: company.id,
       });
-      return { id: company.id, ...input, role: 'owner' as const };
+      return { id: company.id, ...input, closedThrough: null, role: 'owner' as const };
     });
   }
 

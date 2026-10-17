@@ -3,12 +3,14 @@ import { CompaniesModule } from '../companies/companies.module.js';
 import { AccountingController } from './accounting.controller.js';
 import { AccountsService } from './accounts.service.js';
 import { JournalService } from './journal.service.js';
+import { OperationsService } from './operations.service.js';
+import { PeriodsService } from './periods.service.js';
 import { ReportsService } from './reports.service.js';
 
 @Module({
   imports: [CompaniesModule],
   controllers: [AccountingController],
-  providers: [AccountsService, JournalService, ReportsService],
+  providers: [AccountsService, JournalService, ReportsService, PeriodsService, OperationsService],
   exports: [JournalService],
 })
 export class AccountingModule {}
