@@ -5,6 +5,8 @@ export interface JournalLineInput {
   accountCode: string;
   debit: Cents;
   credit: Cents;
+  /** Cliente o proveedor de la línea (por cobrar o por pagar). */
+  contactId?: string;
 }
 
 export type JournalProblem =

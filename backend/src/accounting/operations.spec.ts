@@ -1,5 +1,10 @@
 import { checkJournal } from './journal-rules.js';
-import { buildOperation, isMoneyAccountCode, type Operation } from './operations.js';
+import {
+  buildOperation,
+  isMoneyAccountCode,
+  type Operation,
+  operationContactKind,
+} from './operations.js';
 
 const plain = (text: string) => text.replace(/\s/g, ' ');
 const rmt = { taxRegime: 'rmt' as const };
@@ -108,5 +113,44 @@ describe('operaciones fáciles', () => {
     expect(isMoneyAccountCode('10411')).toBe(true);
     expect(isMoneyAccountCode('1212')).toBe(false);
     expect(isMoneyAccountCode('10')).toBe(false);
+  });
+});
+
+describe('cliente o proveedor', () => {
+  const contactId = '6d1f9a3e-1b2c-4d5e-8f90-123456789abc';
+
+  it('va en la línea de por cobrar o por pagar', () => {
+    const sale = buildOperation(
+      { type: 'sale', total: 11800, kind: 'goods', paidWith: 'credit' },
+      { ...rmt, contactId },
+    );
+    expect(sale.lines.find((l) => l.accountCode === '1212')?.contactId).toBe(contactId);
+    expect(sale.lines.filter((l) => l.contactId)).toHaveLength(1);
+
+    const payment = buildOperation(
+      { type: 'payment', total: 500, from: 'bank' },
+      { ...rmt, contactId },
+    );
+    expect(payment.lines.find((l) => l.accountCode === '4212')?.contactId).toBe(contactId);
+  });
+
+  it('dice qué contacto corresponde', () => {
+    expect(
+      operationContactKind({ type: 'sale', total: 1, kind: 'goods', paidWith: 'credit' }),
+    ).toBe('customer');
+    expect(
+      operationContactKind({ type: 'sale', total: 1, kind: 'goods', paidWith: 'cash' }),
+    ).toBeNull();
+    expect(operationContactKind({ type: 'collection', total: 1, into: 'cash' })).toBe('customer');
+    expect(
+      operationContactKind({
+        type: 'expense',
+        total: 1,
+        category: 'goods',
+        paidWith: 'credit',
+        withInvoice: true,
+      }),
+    ).toBe('supplier');
+    expect(operationContactKind({ type: 'payment', total: 1, from: 'cash' })).toBe('supplier');
   });
 });

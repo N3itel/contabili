@@ -36,7 +36,7 @@ const entryBody = z.object({
   entryDate: date,
   description,
   lines: z
-    .array(z.object({ accountCode, debit: amount, credit: amount }))
+    .array(z.object({ accountCode, debit: amount, credit: amount, contactId: z.uuid().optional() }))
     .min(2)
     .max(MAX_LINES_PER_ENTRY),
 });
@@ -71,6 +71,7 @@ const operationBody = z.object({
   date: date.optional(),
   reference: z.string().trim().min(1).max(40).optional(),
   moneyAccountCode: accountCode.optional(),
+  contactId: z.uuid().optional(),
 });
 
 const summaryQuery = z.object({ period: period.optional() });

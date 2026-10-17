@@ -6,7 +6,14 @@ import { apiError } from '../common/http.js';
 import { uniqueViolation } from '../common/pg.js';
 import { CompanyAccess } from '../companies/company-access.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
-import { accounts, companies, journalEntries, journalLines, users } from '../db/schema/index.js';
+import {
+  accounts,
+  companies,
+  contacts,
+  journalEntries,
+  journalLines,
+  users,
+} from '../db/schema/index.js';
 import {
   checkJournal,
   JOURNAL_PROBLEM_MESSAGES,
@@ -45,6 +52,8 @@ export interface JournalEntryDto {
     accountName: string;
     debit: Cents;
     credit: Cents;
+    /** Cliente o proveedor, si la línea lo tiene. */
+    contact: { id: string; name: string } | null;
   }[];
   totals: { debit: Cents; credit: Cents };
 }
@@ -98,7 +107,12 @@ export class JournalService {
       );
     }
     const lines = reverseLines(
-      original.lines.map((l) => ({ accountCode: l.accountCode, debit: l.debit, credit: l.credit })),
+      original.lines.map((l) => ({
+        accountCode: l.accountCode,
+        debit: l.debit,
+        credit: l.credit,
+        contactId: l.contact?.id,
+      })),
     );
     const description =
       input.description ?? `Extorno del asiento ${original.number}-${original.fiscalYear}`;
@@ -208,6 +222,21 @@ export class JournalService {
       }
     }
 
+    const contactIds = [...new Set(input.lines.flatMap((l) => (l.contactId ? [l.contactId] : [])))];
+    if (contactIds.length > 0) {
+      const found = await tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(and(eq(contacts.companyId, companyId), inArray(contacts.id, contactIds)));
+      if (found.length !== contactIds.length) {
+        throw apiError(
+          HttpStatus.BAD_REQUEST,
+          'contact_not_found',
+          'No encontramos ese cliente o proveedor.',
+        );
+      }
+    }
+
     const [last] = await tx
       .select({ number: max(journalEntries.number) })
       .from(journalEntries)
@@ -236,6 +265,7 @@ export class JournalService {
         accountId: byCode.get(l.accountCode)!.id,
         debitCents: l.debit,
         creditCents: l.credit,
+        contactId: l.contactId ?? null,
       })),
     );
     return entry.id;
@@ -276,9 +306,12 @@ export class JournalService {
         accountName: accounts.name,
         debit: journalLines.debitCents,
         credit: journalLines.creditCents,
+        contactId: contacts.id,
+        contactName: contacts.name,
       })
       .from(journalLines)
       .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+      .leftJoin(contacts, eq(contacts.id, journalLines.contactId))
       .where(
         inArray(
           journalLines.entryId,
@@ -296,6 +329,7 @@ export class JournalService {
         accountName: l.accountName,
         debit: l.debit,
         credit: l.credit,
+        contact: l.contactId ? { id: l.contactId, name: l.contactName ?? '' } : null,
       }));
       return {
         ...e,

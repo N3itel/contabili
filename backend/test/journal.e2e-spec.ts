@@ -64,6 +64,7 @@ describe('libro diario, mayor y balance (e2e)', () => {
       accountName: 'IGV – Cuenta propia',
       debit: 0,
       credit: 1800,
+      contact: null,
     });
   });
 

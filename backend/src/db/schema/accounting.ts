@@ -10,11 +10,12 @@ import {
   pgTable,
   smallint,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { createdAt, id } from './columns.js';
-import { accountNature, taxRegime } from './enums.js';
+import { createdAt, id, ts } from './columns.js';
+import { accountNature, contactKind, taxRegime } from './enums.js';
 import { users } from './users.js';
 
 /**
@@ -113,6 +114,36 @@ export const journalEntries = pgTable(
   ],
 );
 
+/**
+ * Clientes y proveedores de la empresa. Se ligan a las líneas de por cobrar
+ * (12) y por pagar (42) para saber quién debe cuánto. Solo se guarda el RUC
+ * (de empresas); de las personas, el nombre.
+ */
+export const contacts = pgTable(
+  'contacts',
+  {
+    id: id(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    kind: contactKind('kind').notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    ruc: varchar('ruc', { length: 11 }),
+    archivedAt: ts('archived_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique('contacts_id_company_uq').on(t.id, t.companyId),
+    // Un mismo RUC una sola vez como cliente y una como proveedor.
+    uniqueIndex('contacts_ruc_uq')
+      .on(t.companyId, t.kind, t.ruc)
+      .where(sql`${t.ruc} IS NOT NULL`),
+    index('contacts_company_idx').on(t.companyId, t.kind, t.name),
+    check('contacts_ruc_format', sql`${t.ruc} IS NULL OR ${t.ruc} ~ '^(10|15|16|17|20)[0-9]{9}$'`),
+    check('contacts_name_length', sql`char_length(${t.name}) >= 2`),
+  ],
+);
+
 /** Línea del asiento, en céntimos: solo en el debe o solo en el haber. */
 export const journalLines = pgTable(
   'journal_lines',
@@ -124,6 +155,8 @@ export const journalLines = pgTable(
     accountId: uuid('account_id').notNull(),
     debitCents: bigint('debit_cents', { mode: 'number' }).notNull().default(0),
     creditCents: bigint('credit_cents', { mode: 'number' }).notNull().default(0),
+    /** Cliente o proveedor de la línea (por cobrar o por pagar), si lo hay. */
+    contactId: uuid('contact_id'),
   },
   (t) => [
     foreignKey({
@@ -136,6 +169,13 @@ export const journalLines = pgTable(
       columns: [t.accountId, t.companyId],
       foreignColumns: [accounts.id, accounts.companyId],
     }),
+    // El cliente o proveedor es de la misma empresa.
+    foreignKey({
+      name: 'journal_lines_contact_fk',
+      columns: [t.contactId, t.companyId],
+      foreignColumns: [contacts.id, contacts.companyId],
+    }),
+    index('journal_lines_contact_idx').on(t.contactId),
     unique('journal_lines_line_no_uq').on(t.entryId, t.lineNo),
     index('journal_lines_account_idx').on(t.accountId),
     check(

@@ -35,6 +35,25 @@ export interface OperationContext {
   taxRegime: TaxRegime;
   /** Caja o cuenta bancaria elegida, si la empresa abrió subcuentas (por ejemplo 10411). */
   moneyAccountCode?: string;
+  /** Cliente o proveedor: va en la línea de por cobrar o por pagar. */
+  contactId?: string;
+}
+
+/**
+ * Qué contacto lleva la operación: cliente si queda por cobrar o se cobra,
+ * proveedor si queda por pagar o se paga; ninguno si es al contado.
+ */
+export function operationContactKind(op: Operation): 'customer' | 'supplier' | null {
+  switch (op.type) {
+    case 'sale':
+      return op.paidWith === 'credit' ? 'customer' : null;
+    case 'collection':
+      return 'customer';
+    case 'expense':
+      return op.paidWith === 'credit' ? 'supplier' : null;
+    case 'payment':
+      return 'supplier';
+  }
 }
 
 export interface BuiltOperation {
@@ -104,8 +123,21 @@ export function isMoneyAccountCode(code: string): boolean {
 
 export function buildOperation(op: Operation, ctx: OperationContext): BuiltOperation {
   const built = build(op, ctx);
-  // Un IGV de 0 céntimos (montos mínimos) no lleva línea.
-  return { ...built, lines: built.lines.filter((l) => l.debit > 0 || l.credit > 0) };
+  const contactAccount =
+    operationContactKind(op) === 'customer'
+      ? OPERATION_ACCOUNTS.receivable
+      : operationContactKind(op) === 'supplier'
+        ? OPERATION_ACCOUNTS.payable
+        : null;
+  return {
+    ...built,
+    lines: built.lines
+      // Un IGV de 0 céntimos (montos mínimos) no lleva línea.
+      .filter((l) => l.debit > 0 || l.credit > 0)
+      .map((l) =>
+        ctx.contactId && l.accountCode === contactAccount ? { ...l, contactId: ctx.contactId } : l,
+      ),
+  };
 }
 
 function build(op: Operation, ctx: OperationContext): BuiltOperation {

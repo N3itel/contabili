@@ -33,3 +33,6 @@ export const orderStatus = pgEnum('order_status', [
   'failed',
   'expired',
 ]);
+
+/** Clientes (te deben) y proveedores (les debes). */
+export const contactKind = pgEnum('contact_kind', ['customer', 'supplier']);

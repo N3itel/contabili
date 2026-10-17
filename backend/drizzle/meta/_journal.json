@@ -64,6 +64,13 @@
       "when": 1792277471709,
       "tag": "0008_licencias_existentes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792280933981,
+      "tag": "0009_clientes_y_proveedores",
+      "breakpoints": true
     }
   ]
 }
