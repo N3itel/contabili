@@ -40,3 +40,13 @@ export const JOURNAL_PROBLEM_MESSAGES: Readonly<Record<JournalProblem, string>> 
   zero_line: 'Hay una línea sin monto.',
   unbalanced: 'El debe y el haber no cuadran.',
 };
+
+/** Fechas de asiento aceptadas: desde el año 2000 hasta hoy en Lima. */
+export const MIN_ENTRY_YEAR = 2000;
+
+/** Línea de un extorno: el mismo monto en el lado opuesto. */
+export function reverseLines<T extends { debit: number; credit: number }>(
+  lines: readonly T[],
+): T[] {
+  return lines.map((l) => ({ ...l, debit: l.credit, credit: l.debit }));
+}

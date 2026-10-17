@@ -1,4 +1,4 @@
-import { checkJournal } from './journal-rules.js';
+import { checkJournal, reverseLines } from './journal-rules.js';
 
 const line = (accountCode: string, debit: number, credit: number) => ({
   accountCode,
@@ -24,5 +24,18 @@ describe('partida doble', () => {
     expect(checkJournal([line('1011', 0, 0), line('7011', 0, 0)])).toBe('zero_line');
     expect(checkJournal([line('1011', 10.5, 0), line('7011', 0, 10.5)])).toBe('invalid_amount');
     expect(checkJournal([line('1011', -5, 0), line('7011', -5, 0)])).toBe('invalid_amount');
+  });
+});
+
+describe('extorno', () => {
+  it('invierte el debe y el haber y sigue cuadrando', () => {
+    const lines = [line('1212', 11800, 0), line('40111', 0, 1800), line('7011', 0, 10000)];
+    const reversed = reverseLines(lines);
+    expect(reversed).toEqual([
+      line('1212', 0, 11800),
+      line('40111', 1800, 0),
+      line('7011', 10000, 0),
+    ]);
+    expect(checkJournal(reversed)).toBeNull();
   });
 });

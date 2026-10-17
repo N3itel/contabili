@@ -15,6 +15,20 @@
       "when": 1792275753836,
       "tag": "0001_journal_balance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792276472924,
+      "tag": "0002_usuarios_y_empresas",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792276473831,
+      "tag": "0003_company_has_owner",
+      "breakpoints": true
     }
   ]
 }

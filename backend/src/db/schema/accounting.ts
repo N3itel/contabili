@@ -15,6 +15,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, id } from './columns.js';
 import { accountNature, taxRegime } from './enums.js';
+import { users } from './users.js';
 
 /** Empresa que lleva su contabilidad en Contabili, identificada por su RUC. */
 export const companies = pgTable(
@@ -75,13 +76,27 @@ export const journalEntries = pgTable(
     number: integer('number').notNull(),
     entryDate: date('entry_date').notNull(),
     description: varchar('description', { length: 300 }).notNull(),
+    /** Extorno: el asiento que este anula. Cada asiento se extorna una sola vez. */
+    reversesEntryId: uuid('reverses_entry_id'),
+    /** Quién lo registró. */
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
     createdAt: createdAt(),
   },
   (t) => [
+    unique('journal_entries_reverses_uq').on(t.reversesEntryId),
+    // El asiento extornado es de la misma empresa.
+    foreignKey({
+      name: 'journal_entries_reverses_fk',
+      columns: [t.reversesEntryId, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
     unique('journal_entries_number_uq').on(t.companyId, t.fiscalYear, t.number),
     unique('journal_entries_id_company_uq').on(t.id, t.companyId),
     index('journal_entries_date_idx').on(t.companyId, t.entryDate),
     check('journal_entries_number_positive', sql`${t.number} > 0`),
+    check('journal_entries_not_self_reversal', sql`${t.reversesEntryId} <> ${t.id}`),
     check('journal_entries_fiscal_year', sql`${t.fiscalYear} = extract(year from ${t.entryDate})`),
   ],
 );

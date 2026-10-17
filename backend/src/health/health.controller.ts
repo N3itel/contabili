@@ -1,5 +1,6 @@
 import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
+import { Public } from '../auth/auth.guard.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
 
 export interface HealthStatus {
@@ -8,6 +9,7 @@ export interface HealthStatus {
 }
 
 /** Para el balanceador y el monitoreo: responde 200 solo si la base responde. */
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}

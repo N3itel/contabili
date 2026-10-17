@@ -1,20 +1,18 @@
-import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
-import { createTestApp } from './helpers.js';
+import { createTestApp, type TestApp } from './helpers.js';
 
 describe('GET /health (e2e)', () => {
-  let app: INestApplication;
+  let t: TestApp;
 
   beforeAll(async () => {
-    app = await createTestApp();
+    t = await createTestApp();
   });
 
   afterAll(async () => {
-    await app.close();
+    await t.app.close();
   });
 
-  it('responde 200 si la base responde', async () => {
-    const res = await request(app.getHttpServer()).get('/health').expect(200);
+  it('responde 200 sin sesión si la base responde', async () => {
+    const res = await t.http.get('/health').expect(200);
     expect(res.body).toEqual({ status: 'ok', database: 'ok' });
   });
 });

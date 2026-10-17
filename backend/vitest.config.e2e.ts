@@ -14,6 +14,6 @@ export default defineConfig({
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
     fileParallelism: false,
-    env: { NODE_ENV: 'test' },
+    env: { NODE_ENV: 'test', SMS_PROVIDER: 'memory' },
   },
 });

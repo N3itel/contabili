@@ -18,3 +18,18 @@ export function periodOf(date: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`Fecha inválida: ${date}`);
   return date.slice(0, 7);
 }
+
+/** Fecha calendario real en formato 'AAAA-MM-DD' (rechaza 2026-02-30). */
+export function isValidDate(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+}
+
+/** Primer y último día de un periodo 'AAAA-MM'. */
+export function periodRange(period: string): { from: string; to: string } {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new Error(`Periodo inválido: ${period}`);
+  const [year, month] = period.split('-').map(Number);
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { from: `${period}-01`, to: `${period}-${String(last).padStart(2, '0')}` };
+}
