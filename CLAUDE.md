@@ -42,7 +42,7 @@ Guía para quien programe en este repositorio (personas o Claude).
 
 ## Licencias y cobros
 
-- La licencia es por empresa (`company_licenses`): nace con 30 días de prueba del plan Negocio; los planes y precios viven en `billing/plans.ts` (provisionales, con IGV).
+- La licencia es por empresa (`company_licenses`): nace con 30 días de prueba del plan Negocio. Planes y precios en `billing/plans.ts` (con IGV); el análisis está en `docs/precios.md` y `unit-economics.spec.ts` exige al menos 40 % de margen con el plan lleno. Al cambiar un precio o un proveedor, actualiza los supuestos de `COSTS`.
 - Vencida, la empresa queda en solo lectura: las escrituras usan `CompanyAccess.requireWritable()` y responden 402 `license_expired`; leer y pagar siempre se puede. Nunca se borran datos por falta de pago.
 - Personas por plan: invitar y aceptar respetan `maxMembers` (las invitaciones pendientes también cuentan). Bajar a un plan donde no entra el equipo no se puede (`plan_too_small`), ni cambiar de plan con un periodo pagado corriendo (`plan_change_while_paid`).
 - Cobro como en Taxinka: el monto lo fija el servidor; la página `/pagar/<orden>#t=<código>` lleva el código en el fragmento; la tarjeta o Yape van al checkout de Culqi. La licencia se extiende solo cuando Culqi confirma el cargo (respuesta del cobro o webhook que consulta el cargo, nunca cree el cuerpo), una vez por orden (escritura condicional e índice único por cargo). Un pago empieza cuando termina lo que ya había (prueba o periodo pagado).

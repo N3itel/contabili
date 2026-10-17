@@ -34,8 +34,8 @@ describe('sitio público (e2e)', () => {
 
   it('los precios salen de los planes', async () => {
     const res = await t.web.get('/precios').expect(200);
-    expect(res.text).toContain('S/ 29');
-    expect(res.text).toContain('S/ 590');
+    expect(res.text).toContain('S/ 25');
+    expect(res.text).toContain('S/ 490');
     expect(res.text).toContain('30 días gratis');
   });
 

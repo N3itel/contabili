@@ -62,7 +62,7 @@ describe('licencias y pagos (e2e)', () => {
   it('paga con rechazo y verificación del banco; el plan empieza al terminar la prueba', async () => {
     const companyId = await createCompany(t, owner);
     const o = await order(companyId);
-    expect(o).toMatchObject({ amountCents: 2900, status: 'pending', path: `/pagar/${o.id}` });
+    expect(o).toMatchObject({ amountCents: 2500, status: 'pending', path: `/pagar/${o.id}` });
 
     // La página de pago se sirve fija, con su CSP.
     const page = await t.web.get(o.path).expect(200);
@@ -75,7 +75,7 @@ describe('licencias y pagos (e2e)', () => {
       .expect(200);
     expect(session.body).toMatchObject({
       provider: 'fake',
-      amountCents: 2900,
+      amountCents: 2500,
       planName: 'Emprendedor',
       cycleLabel: '1 mes',
       companyName: 'Bodega Prueba SAC',

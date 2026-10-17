@@ -8,8 +8,8 @@ describe('planes y licencias', () => {
       expect(plan.annualCents).toBe(plan.monthlyCents * 10);
       expect(plan.monthlyCents % 100).toBe(0);
     }
-    expect(priceFor('emprendedor', 'monthly')).toBe(2900);
-    expect(priceFor('negocio', 'annual')).toBe(59000);
+    expect(priceFor('emprendedor', 'monthly')).toBe(2500);
+    expect(priceFor('negocio', 'annual')).toBe(49000);
   });
 
   it('suma meses sin pasarse de fin de mes', () => {

@@ -5,7 +5,9 @@ import type { Cents } from '../accounting/money.js';
  * (el año cuesta 10 meses) y vale en la app y en el programa de escritorio.
  * Los precios incluyen IGV (así se muestran al público).
  *
- * PRECIOS PROVISIONALES: son una decisión de negocio pendiente.
+ * Precios fijados el 17/10/2026 frente a la competencia y a lo que cuesta
+ * atender cada empresa (docs/precios.md); `unit-economics.spec.ts` revisa
+ * que ninguno quede en pérdida.
  */
 export type PlanCode = 'emprendedor' | 'negocio';
 export type BillingCycle = 'monthly' | 'annual';
@@ -36,8 +38,8 @@ export const PLANS: Readonly<Record<PlanCode, Plan>> = {
     name: 'Emprendedor',
     tagline: 'Para quien lleva su negocio solo o con una persona más.',
     maxMembers: 2,
-    monthlyCents: 2900,
-    annualCents: 29000,
+    monthlyCents: 2500,
+    annualCents: 25000,
     features: [...COMMON, 'Hasta 2 personas'],
   },
   negocio: {
@@ -45,8 +47,8 @@ export const PLANS: Readonly<Record<PlanCode, Plan>> = {
     name: 'Negocio',
     tagline: 'Para negocios con equipo o con contador externo.',
     maxMembers: 6,
-    monthlyCents: 5900,
-    annualCents: 59000,
+    monthlyCents: 4900,
+    annualCents: 49000,
     features: [...COMMON, 'Hasta 6 personas, con roles (dueño, contador, consulta)'],
   },
 };
