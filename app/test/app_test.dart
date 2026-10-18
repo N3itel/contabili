@@ -385,6 +385,9 @@ void main() {
     expect(api.exports.single, (ExportKind.salesRegister, from, to, ExportFormat.csv));
     await _tapText(tester, 'PDF');
     expect(api.exports.last, (ExportKind.salesRegister, from, to, ExportFormat.pdf));
+    await _tapText(tester, 'Archivo para SUNAT (SIRE)');
+    expect(api.exports.last, (ExportKind.sireSales, from, to, ExportFormat.txt));
+    expect(find.textContaining('validador de SUNAT (PVSIRE)'), findsOneWidget);
 
     await _tapText(tester, 'Compras');
     expect(find.text('Este mes no hay comprobantes de compra'), findsOneWidget);

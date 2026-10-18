@@ -26,7 +26,8 @@ de prueba se compilan desde GitHub Actions.
     renta o cuota del Nuevo RUS según el régimen, como estimado.
   - **Comprobantes y registros**: cada venta o gasto puede llevar su boleta,
     factura, recibo por honorarios o ticket; con ellos salen el registro de
-    ventas y el de compras del mes, sin duplicados.
+    ventas y el de compras del mes, sin duplicados, y sus archivos para el
+    **SIRE** de SUNAT.
   - **Facturación electrónica (beta)**: boletas y facturas en modo de prueba o
     con la cuenta de Nubefact de cada empresa; la venta se anota sola, y se
     anulan con nota de crédito, que la descuenta. En el Nuevo RUS, boletas de
@@ -79,7 +80,7 @@ descargas con enlace firmado (`/exports/:token`). Los montos van en céntimos (S
 | `GET /companies/:id/trend?months=N` | consulta | Ventas y gastos de los últimos meses |
 | `GET /companies/:id/registers/sales` · `/purchases?period=AAAA-MM` | consulta | Registro de ventas o de compras con sus comprobantes |
 | `GET` · `POST /companies/:id/contacts`, `GET` · `PATCH …/:contactId` | consulta · contador | Clientes y proveedores, con lo que deben |
-| `POST /companies/:id/exports` | consulta | Enlace de descarga (5 min): diario, balance, registros o reporte del mes, en `csv` o `pdf` |
+| `POST /companies/:id/exports` | consulta | Enlace de descarga (5 min): diario, balance, registros o reporte del mes, en `csv` o `pdf`; archivos del SIRE (`sire_sales`, `sire_purchases`) en `txt` |
 | `POST /companies/:id/journal` | contador | Registrar un asiento |
 | `GET /companies/:id/journal?period=AAAA-MM&after=N` | consulta | Diario del mes, de a 100 |
 | `GET /companies/:id/journal/:entryId` | consulta | Un asiento |
@@ -111,8 +112,8 @@ Sin `from`/`to`, los reportes van del 1 de enero hasta hoy (hora de Lima).
    firmados (MSIX, DMG notarizado, .deb, Play y App Store) y publicarlos en `/descargas`.
 5. ~~Avisos antes de que venza el plan y factura electrónica de cada pago de licencia.~~
 6. ~~Registro de ventas y de compras desde comprobantes; exportar a PDF.~~
-7. ~~Facturación electrónica (beta, con Nubefact) y notas de crédito.~~ Nuevo RUS (hoy solo de
-   prueba) y libros electrónicos PLE.
+7. ~~Facturación electrónica (beta, con Nubefact), notas de crédito y archivos del SIRE.~~
+   Falta: mandar a SUNAT las boletas del Nuevo RUS (hoy solo de prueba).
 
 ## Desarrollo
 

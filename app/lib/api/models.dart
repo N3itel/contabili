@@ -622,17 +622,22 @@ enum ExportKind {
   trialBalance('trial_balance', 'Balance de comprobación'),
   salesRegister('sales_register', 'Registro de ventas'),
   purchaseRegister('purchase_register', 'Registro de compras'),
-  monthlyReport('monthly_report', 'Reporte del mes');
+  monthlyReport('monthly_report', 'Reporte del mes'),
+
+  /// Archivos para reemplazar la propuesta del SIRE de SUNAT (texto, de un mes).
+  sireSales('sire_sales', 'Registro de ventas para el SIRE'),
+  sirePurchases('sire_purchases', 'Registro de compras para el SIRE');
 
   const ExportKind(this.wire, this.label);
   final String wire;
   final String label;
 }
 
-/// Formato de una descarga: Excel (CSV) o PDF.
+/// Formato de una descarga: Excel (CSV), PDF o el texto del SIRE.
 enum ExportFormat {
   csv('csv', 'Excel'),
-  pdf('pdf', 'PDF');
+  pdf('pdf', 'PDF'),
+  txt('txt', 'SIRE');
 
   const ExportFormat(this.wire, this.label);
   final String wire;
@@ -641,13 +646,16 @@ enum ExportFormat {
 
 /// Registro de ventas o de compras: los comprobantes de un mes.
 enum RegisterKind {
-  sales('sales', 'Ventas', ExportKind.salesRegister),
-  purchases('purchases', 'Compras', ExportKind.purchaseRegister);
+  sales('sales', 'Ventas', ExportKind.salesRegister, ExportKind.sireSales),
+  purchases('purchases', 'Compras', ExportKind.purchaseRegister, ExportKind.sirePurchases);
 
-  const RegisterKind(this.wire, this.label, this.export);
+  const RegisterKind(this.wire, this.label, this.export, this.sire);
   final String wire;
   final String label;
   final ExportKind export;
+
+  /// El mismo registro en el formato del SIRE.
+  final ExportKind sire;
 }
 
 class RegisterRow {

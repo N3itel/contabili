@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { jwtVerify, SignJWT } from 'jose';
 import { deriveKey } from '../auth/tokens.js';
 import { apiError } from '../common/http.js';
@@ -17,7 +17,7 @@ import {
   licenseReceipts,
 } from '../db/schema/index.js';
 import { CSV_BOM, csvAmount, csvRow, csvText } from './csv.js';
-import { formatDate, limaDate } from './lima.js';
+import { formatDate, limaDate, periodRange } from './lima.js';
 import { einvoicePdf } from '../pdf/einvoice-pdf.js';
 import { journalPdf, monthlyReportPdf, registerPdf, trialBalancePdf } from '../pdf/reports.js';
 import {
@@ -30,6 +30,15 @@ import {
 } from '../einvoicing/einvoice-rules.js';
 import { RegistersService } from './registers.service.js';
 import { ReportsService } from './reports.service.js';
+import {
+  inPurchaseRegister,
+  rceLine,
+  rvieLine,
+  type SireBook,
+  sireFile,
+  sireFileName,
+  type SireRow,
+} from './sire-rules.js';
 
 export const EXPORT_KINDS = [
   'journal',
@@ -37,13 +46,23 @@ export const EXPORT_KINDS = [
   'sales_register',
   'purchase_register',
   'monthly_report',
+  'sire_sales',
+  'sire_purchases',
 ] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
-export const EXPORT_FORMATS = ['csv', 'pdf'] as const;
+export const EXPORT_FORMATS = ['csv', 'pdf', 'txt'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /** El reporte del mes es solo PDF: es para leerlo, no para sacar cuentas en Excel. */
 const PDF_ONLY: ReadonlySet<ExportKind> = new Set(['monthly_report']);
+/** Los archivos del SIRE son texto con el formato de SUNAT, de un mes. */
+const SIRE: ReadonlySet<ExportKind> = new Set(['sire_sales', 'sire_purchases']);
+/** De un solo mes. */
+const MONTHLY: ReadonlySet<ExportKind> = new Set([
+  'monthly_report',
+  'sire_sales',
+  'sire_purchases',
+]);
 /** En PDF, el diario va hasta este tope de líneas (un PDF de miles de páginas no sirve). */
 export const EXPORT_PDF_MAX_LINES = 5000;
 
@@ -120,12 +139,33 @@ export class ExportsService {
     input: { kind: ExportKind; format?: ExportFormat; from: string; to: string },
   ): Promise<{ url: string; expiresAt: string }> {
     await this.access.require(companyId, actorId, 'viewer');
-    const format = input.format ?? (PDF_ONLY.has(input.kind) ? 'pdf' : 'csv');
+    const format =
+      input.format ?? (PDF_ONLY.has(input.kind) ? 'pdf' : SIRE.has(input.kind) ? 'txt' : 'csv');
     if (PDF_ONLY.has(input.kind) && format !== 'pdf') {
       throw apiError(HttpStatus.BAD_REQUEST, 'pdf_only', 'El reporte del mes solo está en PDF.');
     }
-    if (input.kind === 'monthly_report' && input.from.slice(0, 7) !== input.to.slice(0, 7)) {
-      throw apiError(HttpStatus.BAD_REQUEST, 'one_month', 'El reporte es de un solo mes.');
+    if (SIRE.has(input.kind) !== (format === 'txt')) {
+      throw apiError(
+        HttpStatus.BAD_REQUEST,
+        'sire_txt_only',
+        'Los archivos para SUNAT (SIRE) son de texto; los demás, en Excel o PDF.',
+      );
+    }
+    if (MONTHLY.has(input.kind) && input.from.slice(0, 7) !== input.to.slice(0, 7)) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'one_month', 'Es de un solo mes: elige un mes.');
+    }
+    if (SIRE.has(input.kind)) {
+      const [company] = await this.db
+        .select({ taxRegime: companies.taxRegime })
+        .from(companies)
+        .where(eq(companies.id, companyId));
+      if (company.taxRegime === 'nrus') {
+        throw apiError(
+          HttpStatus.BAD_REQUEST,
+          'sire_not_for_nrus',
+          'En el Nuevo RUS no se llevan registros de ventas ni de compras: no hay archivo para el SIRE.',
+        );
+      }
     }
     const token = await new SignJWT({
       cid: companyId,
@@ -178,6 +218,9 @@ export class ExportsService {
         ? this.receiptFile(claims, company)
         : this.einvoiceFile(claims, company);
     }
+    if (claims.kind === 'sire_sales' || claims.kind === 'sire_purchases') {
+      return this.sireTxt(claims, company);
+    }
     const range =
       claims.kind === 'monthly_report' ? claims.from.slice(0, 7) : `${claims.from}-al-${claims.to}`;
     const name = {
@@ -186,7 +229,7 @@ export class ExportsService {
       sales_register: 'registro-de-ventas',
       purchase_register: 'registro-de-compras',
       monthly_report: 'reporte-del-mes',
-    }[claims.kind];
+    }[claims.kind as Exclude<ExportKind, 'sire_sales' | 'sire_purchases'>];
     const filename = `${name}-${company.ruc}-${range}.${claims.format}`;
     if (claims.format === 'pdf') {
       return { filename, contentType: 'application/pdf', body: await this.pdf(claims, company) };
@@ -233,6 +276,10 @@ export class ExportsService {
           company,
           await this.reports.trialBalance(companyId, userId, from, to),
         );
+      case 'sire_sales':
+      case 'sire_purchases':
+        // Solo en texto: el enlace no se firma con otro formato.
+        throw linkExpired();
       case 'journal': {
         const lines = await this.journalLines(claims, EXPORT_PDF_MAX_LINES + 1);
         return journalPdf(
@@ -296,6 +343,72 @@ export class ExportsService {
         nrus: row.nrus,
         hash: row.hash,
       }),
+    };
+  }
+
+  /**
+   * Archivo del SIRE que reemplaza la propuesta de SUNAT, armado con el
+   * registro del mes. El DNI de quien compra sale de la boleta electrónica.
+   */
+  private async sireTxt(
+    claims: ExportClaims,
+    company: { ruc: string; legalName: string },
+  ): Promise<ExportFile> {
+    const book: SireBook = claims.kind === 'sire_sales' ? 'sales' : 'purchases';
+    const period = claims.from.slice(0, 7);
+    const { from, to } = periodRange(period);
+    const report = await this.registers.register(
+      claims.companyId,
+      claims.userId,
+      book === 'sales' ? 'sale' : 'purchase',
+      from,
+      to,
+    );
+    if (report.truncated) {
+      throw apiError(
+        HttpStatus.BAD_REQUEST,
+        'sire_too_many',
+        'Este mes tiene más comprobantes de los que entran en un archivo. Escríbenos y te ayudamos.',
+      );
+    }
+    const entryIds = report.rows.map((r) => r.entryId);
+    const people = entryIds.length
+      ? await this.db
+          .select({
+            entryId: einvoices.entryId,
+            docType: einvoices.customerDocType,
+            number: einvoices.customerDocNumber,
+          })
+          .from(einvoices)
+          .where(
+            and(eq(einvoices.companyId, claims.companyId), inArray(einvoices.entryId, entryIds)),
+          )
+      : [];
+    const dni = new Map(
+      people.flatMap((p) => (p.docType === 'dni' && p.number ? [[p.entryId, p.number]] : [])),
+    );
+    const rows: SireRow[] = report.rows.map((r) => ({
+      issueDate: r.issueDate,
+      docType: r.docType,
+      series: r.series,
+      number: r.number,
+      partyDocType: r.counterpartyRuc ? '6' : dni.has(r.entryId) ? '1' : null,
+      partyDoc: r.counterpartyRuc ?? dni.get(r.entryId) ?? null,
+      partyName: r.counterpartyName,
+      base: r.base,
+      igv: r.igv,
+      total: r.total,
+      annulled: r.annulled,
+      modifies: r.modifies,
+    }));
+    const lines =
+      book === 'sales'
+        ? rows.map((r) => rvieLine(company, period, r))
+        : rows.filter(inPurchaseRegister).map((r) => rceLine(company, period, r));
+    return {
+      filename: sireFileName(book, company.ruc, period, lines.length > 0),
+      contentType: 'text/plain; charset=utf-8',
+      body: sireFile(lines),
     };
   }
 

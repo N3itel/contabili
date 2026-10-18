@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/api.dart';
 import '../core/dates.dart';
 import '../core/money.dart';
+import '../core/operations.dart';
 import '../session/session.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
@@ -66,7 +67,7 @@ class _RegistersScreenState extends State<RegistersScreen> {
     try {
       final link = await widget.session.api.exportLink(
         _company.id,
-        kind: _kind.export,
+        kind: format == ExportFormat.txt ? _kind.sire : _kind.export,
         from: from,
         to: to,
         format: format,
@@ -75,9 +76,14 @@ class _RegistersScreenState extends State<RegistersScreen> {
       setState(
         () => _notice = !opened
             ? 'No pudimos abrir el navegador. Inténtalo de nuevo.'
-            : format == ExportFormat.pdf
-            ? 'Abrimos el PDF en tu navegador: puedes guardarlo, imprimirlo o mandarlo.'
-            : 'Abrimos la descarga en tu navegador. El archivo se abre con Excel.',
+            : switch (format) {
+                ExportFormat.pdf =>
+                  'Abrimos el PDF en tu navegador: puedes guardarlo, imprimirlo o mandarlo.',
+                ExportFormat.csv =>
+                  'Abrimos la descarga en tu navegador. El archivo se abre con Excel.',
+                ExportFormat.txt =>
+                  'Descargamos el archivo para reemplazar la propuesta del SIRE. Revísalo con el validador de SUNAT (PVSIRE) antes de subirlo.',
+              },
       );
     } on ApiException catch (error) {
       setState(() => _notice = error.message);
@@ -194,6 +200,15 @@ class _RegistersScreenState extends State<RegistersScreen> {
                           ),
                         ],
                       ),
+                      // En el Nuevo RUS no se llevan registros para SUNAT.
+                      if (_company.taxRegime != TaxRegime.nrus) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => _export(ExportFormat.txt),
+                          icon: const Icon(Icons.upload_file_outlined),
+                          label: const Text('Archivo para SUNAT (SIRE)'),
+                        ),
+                      ],
                     ],
                   ],
                 ],
