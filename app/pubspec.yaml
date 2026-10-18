@@ -29,3 +29,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    # Licencia OFL (assets/fonts/OFL-Figtree.txt); la misma letra del sitio.
+    - family: Figtree
+      fonts:
+        - asset: assets/fonts/Figtree-Variable.ttf

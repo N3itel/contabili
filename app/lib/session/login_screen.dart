@@ -119,6 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      bottomNavigationBar: const SafeArea(top: false, child: TocapuBand(height: 14)),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
@@ -131,7 +132,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     ContabiliMark(size: 44),
                     SizedBox(width: 12),
-                    Text('Contabili', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                    Flexible(
+                      child: Text(
+                        'Contabili',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    BetaBadge(),
                   ],
                 ),
                 const SizedBox(height: 28),

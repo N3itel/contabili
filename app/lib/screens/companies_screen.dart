@@ -82,12 +82,10 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     final user = widget.session.user;
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
-          children: [
-            ContabiliMark(size: 32),
-            SizedBox(width: 10),
-            Flexible(child: Text('Contabili', overflow: TextOverflow.ellipsis)),
-          ],
+        title: const BrandTitle(markSize: 32),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(8),
+          child: TocapuBand(height: 8),
         ),
         actions: [TextButton(onPressed: widget.session.logout, child: const Text('Salir'))],
       ),
