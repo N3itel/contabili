@@ -2,6 +2,7 @@ import 'package:contabili/api/api.dart';
 import 'package:contabili/api/fake_api.dart';
 import 'package:contabili/api/session_store.dart';
 import 'package:contabili/app.dart';
+import 'package:contabili/core/dates.dart';
 import 'package:contabili/core/operations.dart';
 import 'package:contabili/session/session.dart';
 import 'package:flutter/material.dart';
@@ -223,7 +224,7 @@ void main() {
     await h.pump(tester);
     expect(find.text('Plata disponible'), findsOneWidget);
     expect(tester.takeException(), isNull, reason: 'Inicio');
-    for (final tab in ['Movimientos', 'Mi plan', 'Más', 'Inicio']) {
+    for (final tab in ['Movimientos', 'Clientes', 'Mi plan', 'Más', 'Inicio']) {
       await _tapText(tester, tab);
       expect(tester.takeException(), isNull, reason: tab);
     }
@@ -231,6 +232,88 @@ void main() {
     await tester.enterText(find.byType(TextField).first, '118');
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    // La app está en español: el botón de volver dice «Atrás».
+    await tester.tap(find.byTooltip('Atrás'));
+    await tester.pumpAndSettle();
+    await _tapText(tester, 'Impuestos de ${monthName(api.period)}');
+    expect(find.text('Impuestos del mes'), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'Impuestos');
+  });
+
+  testWidgets('venta al crédito a un cliente nuevo: se ve cuánto debe', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    final h = _Harness(api);
+    await h.pump(tester);
+    await _tapText(tester, 'Vendí');
+    await tester.enterText(find.byType(TextField).first, '236');
+    await _tapText(tester, 'Me lo deben');
+    expect(find.text('¿Qué cliente? (opcional)'), findsOneWidget);
+    await _tapText(tester, 'Nuevo cliente');
+    final dialogFields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(dialogFields.first, 'Comercial Andina');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Guardar').last);
+    await tester.pumpAndSettle();
+    // Queda elegido en la venta.
+    final chip = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Comercial Andina'));
+    expect(chip.selected, isTrue);
+    await _tapText(tester, 'Guardar');
+    await _tapText(tester, 'Listo');
+
+    await _tapText(tester, 'Clientes');
+    expect(find.text('Te deben en total'), findsOneWidget);
+    expect(find.text('S/ 236.00'), findsNWidgets(2));
+    await _tapText(tester, 'Comercial Andina');
+    expect(find.text('Te debe'), findsOneWidget);
+    expect(find.text('Venta de mercadería al crédito'), findsOneWidget);
+  });
+
+  testWidgets('impuestos del mes: desde Inicio y anota el pago del IGV', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    await api.recordOperation(
+      _companyId,
+      const Sale(11800, kind: SaleKind.goods, paidWith: Settlement.cash),
+    );
+    final h = _Harness(api);
+    await h.pump(tester);
+    expect(find.text('Tus últimos meses'), findsOneWidget);
+    await _tapText(tester, 'Impuestos de ${monthName(api.period)}');
+    expect(find.text('Le tocaría pagar a SUNAT por ${monthName(api.period)}'), findsOneWidget);
+    await _tapText(tester, 'Ya pagué el IGV');
+    expect(find.text('Anotar un pago a SUNAT'), findsOneWidget);
+    // El monto llega ya escrito.
+    expect(find.widgetWithText(TextField, '18.00'), findsOneWidget);
+    await _tapText(tester, 'Guardar');
+    expect(find.text('¡Listo, quedó anotado!'), findsOneWidget);
+  });
+
+  testWidgets('descarga los movimientos del mes para Excel', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    final h = _Harness(api);
+    await h.pump(tester);
+    await _tapText(tester, 'Movimientos');
+    await _tapText(tester, 'Descargar para Excel');
+    await _tapText(tester, 'Movimientos de ${periodLabel(api.period)}');
+    final (from, to) = periodBounds(api.period);
+    expect(api.exports.single, (ExportKind.journal, from, to));
+    expect(h.opened.single.path, '/api/v1/exports/enlace-de-prueba');
+    expect(find.textContaining('se abre con Excel'), findsOneWidget);
+
+    await _tapText(tester, 'Descargar para Excel');
+    await _tapText(
+      tester,
+      'Balance de ${api.period.substring(0, 4)} hasta ${monthName(api.period)}',
+    );
+    expect(api.exports.last, (ExportKind.trialBalance, '${api.period.substring(0, 4)}-01-01', to));
+  });
+
+  testWidgets('se ve que es beta', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    await _Harness(api).pump(tester);
+    expect(find.text('BETA'), findsOneWidget);
   });
 
   testWidgets('en la computadora, la navegación va al costado', (tester) async {

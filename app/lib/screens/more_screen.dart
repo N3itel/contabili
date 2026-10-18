@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import '../session/session.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
+import 'taxes_screen.dart';
 import 'team_screen.dart';
 
-/// Más: equipo, cambiar de empresa, ayuda y cerrar sesión.
+/// Más: impuestos, equipo, cambiar de empresa, ayuda y cerrar sesión.
 class MoreScreen extends StatelessWidget {
-  const MoreScreen({super.key, required this.session});
+  const MoreScreen({super.key, required this.session, this.changes});
 
   final SessionController session;
+  final ValueNotifier<int>? changes;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,18 @@ class MoreScreen extends StatelessWidget {
               Card(
                 child: Column(
                   children: [
+                    ListTile(
+                      leading: const Icon(Icons.account_balance_outlined),
+                      title: const Text('Impuestos del mes'),
+                      subtitle: const Text('Cuánto te toca pagar a SUNAT'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TaxesScreen(session: session, changes: changes),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
                     ListTile(
                       leading: const Icon(Icons.group_outlined),
                       title: const Text('Tu equipo'),

@@ -5,11 +5,13 @@ import '../core/dates.dart';
 import '../core/money.dart';
 import '../session/session.dart';
 import '../ui/theme.dart';
+import '../ui/trend_chart.dart';
 import '../ui/widgets.dart';
 import 'operation_screen.dart';
+import 'taxes_screen.dart';
 
-/// Inicio: cómo va el negocio en palabras simples y los cuatro botones para
-/// anotar lo que pasó.
+/// Inicio: cómo va el negocio en palabras simples, los cuatro botones para
+/// anotar lo que pasó, los impuestos del mes y cómo vienen los últimos meses.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -29,6 +31,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Summary? _summary;
   License? _license;
+  MonthlyTaxes? _taxes;
+  List<TrendPoint> _trend = const [];
   Object? _error;
 
   Company get _company => widget.session.company!;
@@ -50,11 +54,18 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _error = null);
     try {
       final api = widget.session.api;
-      final results = await Future.wait([api.summary(_company.id), api.billing(_company.id)]);
+      final results = await Future.wait([
+        api.summary(_company.id),
+        api.billing(_company.id),
+        api.taxes(_company.id),
+        api.trend(_company.id),
+      ]);
       if (!mounted) return;
       setState(() {
         _summary = results[0] as Summary;
         _license = (results[1] as Billing).license;
+        _taxes = results[2] as MonthlyTaxes;
+        _trend = results[3] as List<TrendPoint>;
       });
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error);
@@ -69,6 +80,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (saved == true) widget.changes.value++;
   }
+
+  Future<void> _openTaxes() => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => TaxesScreen(session: widget.session, changes: widget.changes),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +127,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 10),
                 _SummaryCards(summary: summary),
+                if (_taxes case final taxes?) ...[
+                  const SizedBox(height: 14),
+                  _TaxesCard(taxes: taxes, onOpen: _openTaxes),
+                ],
+                if (_trend.any((p) => p.sales > 0 || p.expenses > 0)) ...[
+                  const SizedBox(height: 24),
+                  Text('Tus últimos meses', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 10),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
+                      child: TrendChart(points: _trend),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -164,7 +196,7 @@ class _ActionGrid extends StatelessWidget {
     // Filas que crecen con el texto (la letra puede estar agrandada): los
     // botones de una fila quedan del mismo alto.
     final columns = MediaQuery.sizeOf(context).width >= 700 ? 4 : 2;
-    const types = OperationType.values;
+    const types = OperationType.home;
     return Column(
       children: [
         for (var start = 0; start < types.length; start += columns) ...[
@@ -280,6 +312,7 @@ class _SummaryCards extends StatelessWidget {
     ];
     if (!wide) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final card in cards) ...[card, const SizedBox(height: 10)],
         ],
@@ -340,6 +373,58 @@ class _Figure extends StatelessWidget {
             const SizedBox(height: 4),
             Text(detail, style: const TextStyle(fontSize: 14, color: ContabiliColors.ink2)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Cuánto toca pagar a SUNAT este mes; lleva al detalle.
+class _TaxesCard extends StatelessWidget {
+  const _TaxesCard({required this.taxes, required this.onOpen});
+
+  final MonthlyTaxes taxes;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: ContabiliColors.goldSoft,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              const Icon(Icons.account_balance_outlined, size: 34, color: ContabiliColors.amber),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Impuestos de ${monthName(taxes.period)}',
+                      style: const TextStyle(fontSize: 16, color: ContabiliColors.ink2),
+                    ),
+                    Text(
+                      formatSoles(taxes.total),
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const Text(
+                      'Lo que va del mes para SUNAT. Toca para ver el detalle.',
+                      style: TextStyle(fontSize: 14, color: ContabiliColors.ink2),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
         ),
       ),
     );

@@ -125,6 +125,53 @@ class Payment extends Operation {
   Map<String, Object> toJson() => {'type': 'payment', 'total': total, 'from': from.wire};
 }
 
+enum TaxKind {
+  igv('igv', 'IGV'),
+  income('income', 'Renta');
+
+  const TaxKind(this.wire, this.label);
+  final String wire;
+  final String label;
+}
+
+/// Se pagó a SUNAT el IGV o el pago a cuenta de la renta.
+class TaxPayment extends Operation {
+  const TaxPayment(super.total, {required this.tax, required this.from});
+  final TaxKind tax;
+  final Money from;
+
+  @override
+  Map<String, Object> toJson() => {
+    'type': 'tax_payment',
+    'total': total,
+    'tax': tax.wire,
+    'from': from.wire,
+  };
+}
+
+enum ContactKind {
+  customer('customer', 'Cliente', 'Clientes'),
+  supplier('supplier', 'Proveedor', 'Proveedores');
+
+  const ContactKind(this.wire, this.label, this.plural);
+  final String wire;
+  final String label;
+  final String plural;
+
+  static ContactKind fromWire(String wire) => values.firstWhere((k) => k.wire == wire);
+}
+
+/// Qué contacto lleva la operación, como `operationContactKind` del backend:
+/// cliente si queda por cobrar o se cobra, proveedor si queda por pagar o se
+/// paga; ninguno si es al contado.
+ContactKind? operationContactKind(Operation op) => switch (op) {
+  Sale(:final paidWith) => paidWith == Settlement.credit ? ContactKind.customer : null,
+  Collection() => ContactKind.customer,
+  Expense(:final paidWith) => paidWith == Settlement.credit ? ContactKind.supplier : null,
+  Payment() => ContactKind.supplier,
+  TaxPayment() => null,
+};
+
 /// Cuánto de la operación es IGV, con las mismas reglas del servidor.
 IgvBreakdown operationIgv(Operation op, TaxRegime regime) {
   final noIgv = IgvBreakdown(base: op.total, igv: 0, total: op.total);
@@ -132,6 +179,6 @@ IgvBreakdown operationIgv(Operation op, TaxRegime regime) {
     Sale() => regime.chargesIgv ? igvFromTotal(op.total) : noIgv,
     Expense(:final withInvoice, :final category) =>
       withInvoice && regime.chargesIgv && category.carriesIgv ? igvFromTotal(op.total) : noIgv,
-    Collection() || Payment() => noIgv,
+    Collection() || Payment() || TaxPayment() => noIgv,
   };
 }

@@ -32,12 +32,33 @@ abstract interface class ContabiliApi {
     Operation operation, {
     String? date,
     String? reference,
+    String? contactId,
   });
   Future<JournalPage> journal(String companyId, {required String period, int after = 0});
   Future<JournalEntry> reverseEntry(String companyId, String entryId);
   Future<void> closePeriod(String companyId, String period);
 
   Future<Billing> billing(String companyId);
+
+  Future<List<Contact>> contacts(String companyId, {ContactKind? kind});
+  Future<Contact> createContact(
+    String companyId, {
+    required ContactKind kind,
+    required String name,
+    String? ruc,
+  });
+  Future<ContactDetail> contact(String companyId, String contactId);
+
+  Future<MonthlyTaxes> taxes(String companyId, {String? period});
+  Future<List<TrendPoint>> trend(String companyId, {int months = 6});
+
+  /// Enlace de descarga para Excel (vence en 5 minutos); se abre en el navegador.
+  Future<Uri> exportLink(
+    String companyId, {
+    required ExportKind kind,
+    required String from,
+    required String to,
+  });
 
   /// Crea la orden de pago y devuelve la dirección de la página de pago.
   Future<Uri> createOrder(String companyId, {required String plan, required BillingCycle cycle});

@@ -9,6 +9,7 @@ import '../ui/widgets.dart';
 
 /// Lo anotado en el mes, del más nuevo al más antiguo. Un error se corrige
 /// anulándolo (se registra al revés, nunca se borra) y, quien registra, cierra el mes.
+/// Desde aquí se descargan los libros para Excel (para el contador).
 class MovementsScreen extends StatefulWidget {
   const MovementsScreen({super.key, required this.session, required this.changes});
 
@@ -104,6 +105,27 @@ class _MovementsScreenState extends State<MovementsScreen> {
       await _api.closePeriod(_company.id, _period);
       await widget.session.refreshCompany();
       setState(() => _notice = 'Cerraste $month.');
+    } on ApiException catch (error) {
+      setState(() => _notice = error.message);
+    }
+  }
+
+  Future<void> _export() async {
+    final kind = await showModalBottomSheet<ExportKind>(
+      context: context,
+      builder: (context) => _ExportSheet(period: _period),
+    );
+    if (kind == null || !mounted) return;
+    final (monthStart, monthEnd) = periodBounds(_period);
+    final from = kind == ExportKind.journal ? monthStart : '${_period.substring(0, 4)}-01-01';
+    try {
+      final link = await _api.exportLink(_company.id, kind: kind, from: from, to: monthEnd);
+      final opened = await widget.session.openLink(link);
+      setState(
+        () => _notice = opened
+            ? 'Abrimos la descarga en tu navegador. El archivo se abre con Excel.'
+            : 'No pudimos abrir el navegador. Inténtalo de nuevo.',
+      );
     } on ApiException catch (error) {
       setState(() => _notice = error.message);
     }
@@ -230,8 +252,14 @@ class _MovementsScreenState extends State<MovementsScreen> {
                   const SizedBox(height: 10),
                   OutlinedButton(onPressed: _more, child: const Text('Ver más')),
                 ],
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: _export,
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Descargar para Excel'),
+                ),
                 if (_canClose) ...[
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
                   OutlinedButton.icon(
                     onPressed: _close,
                     icon: const Icon(Icons.lock_outline),
@@ -242,6 +270,46 @@ class _MovementsScreenState extends State<MovementsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Qué descargar: lo del mes o el balance del año hasta ese mes.
+class _ExportSheet extends StatelessWidget {
+  const _ExportSheet({required this.period});
+
+  final String period;
+
+  @override
+  Widget build(BuildContext context) {
+    final year = period.substring(0, 4);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text('Descargar para Excel', style: Theme.of(context).textTheme.titleLarge),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: Text('Movimientos de ${periodLabel(period)}'),
+              subtitle: const Text('El libro diario: cada movimiento con su asiento.'),
+              onTap: () => Navigator.of(context).pop(ExportKind.journal),
+            ),
+            ListTile(
+              leading: const Icon(Icons.balance_outlined),
+              title: Text('Balance de $year hasta ${monthName(period)}'),
+              subtitle: const Text('El balance de comprobación, para tu contador.'),
+              onTap: () => Navigator.of(context).pop(ExportKind.trialBalance),
+            ),
+          ],
+        ),
       ),
     );
   }

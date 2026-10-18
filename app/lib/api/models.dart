@@ -360,3 +360,156 @@ class Member {
   final String phone;
   final Role role;
 }
+
+class Contact {
+  const Contact({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.balance,
+    this.ruc,
+  });
+
+  factory Contact.fromJson(Json json) => Contact(
+    id: json['id'] as String,
+    kind: ContactKind.fromWire(json['kind'] as String),
+    name: json['name'] as String,
+    ruc: json['ruc'] as String?,
+    balance: json['balance'] as int,
+  );
+
+  final String id;
+  final ContactKind kind;
+  final String name;
+  final String? ruc;
+
+  /// Cliente: lo que te debe. Proveedor: lo que le debes.
+  final Cents balance;
+}
+
+class ContactMovement {
+  const ContactMovement({
+    required this.entryDate,
+    required this.description,
+    required this.amount,
+    required this.balance,
+  });
+
+  factory ContactMovement.fromJson(Json json) => ContactMovement(
+    entryDate: json['entryDate'] as String,
+    description: json['description'] as String,
+    amount: json['amount'] as int,
+    balance: json['balance'] as int,
+  );
+
+  final String entryDate;
+  final String description;
+
+  /// Positivo: sube lo que se debe (venta o compra al crédito). Negativo: baja.
+  final Cents amount;
+  final Cents balance;
+}
+
+class ContactDetail {
+  const ContactDetail(this.contact, this.movements);
+
+  factory ContactDetail.fromJson(Json json) => ContactDetail(
+    Contact.fromJson(json['contact'] as Json),
+    [for (final m in json['movements'] as List) ContactMovement.fromJson(m as Json)],
+  );
+
+  final Contact contact;
+  final List<ContactMovement> movements;
+}
+
+/// Lo que toca pagar a SUNAT en el mes, como lo devuelve `GET /taxes`.
+class MonthlyTaxes {
+  const MonthlyTaxes({
+    required this.period,
+    required this.regime,
+    required this.igv,
+    required this.incomeBase,
+    required this.incomeRatePercent,
+    required this.nrusCategory,
+    required this.incomeAmount,
+    required this.total,
+    required this.notes,
+  });
+
+  factory MonthlyTaxes.fromJson(Json json) {
+    final income = json['income'] as Json;
+    final igv = json['igv'] as Json?;
+    return MonthlyTaxes(
+      period: json['period'] as String,
+      regime: TaxRegime.fromWire(json['regime'] as String),
+      igv: igv == null
+          ? null
+          : IgvMonth(
+              sales: igv['sales'] as int,
+              purchases: igv['purchases'] as int,
+              previousCredit: igv['previousCredit'] as int,
+              toPay: igv['toPay'] as int,
+              nextCredit: igv['nextCredit'] as int,
+            ),
+      incomeBase: income['base'] as int,
+      incomeRatePercent: (income['ratePercent'] as num?)?.toDouble(),
+      nrusCategory: income['nrusCategory'] as int?,
+      incomeAmount: income['amount'] as int,
+      total: json['total'] as int,
+      notes: [for (final n in json['notes'] as List) n as String],
+    );
+  }
+
+  final String period;
+  final TaxRegime regime;
+
+  /// Null en el Nuevo RUS (no separa IGV).
+  final IgvMonth? igv;
+  final Cents incomeBase;
+
+  /// Tasa del pago a cuenta en %; null en el Nuevo RUS (cuota fija).
+  final double? incomeRatePercent;
+  final int? nrusCategory;
+  final Cents incomeAmount;
+  final Cents total;
+  final List<String> notes;
+}
+
+class IgvMonth {
+  const IgvMonth({
+    required this.sales,
+    required this.purchases,
+    required this.previousCredit,
+    required this.toPay,
+    required this.nextCredit,
+  });
+
+  final Cents sales;
+  final Cents purchases;
+  final Cents previousCredit;
+  final Cents toPay;
+  final Cents nextCredit;
+}
+
+class TrendPoint {
+  const TrendPoint({required this.period, required this.sales, required this.expenses});
+
+  factory TrendPoint.fromJson(Json json) => TrendPoint(
+    period: json['period'] as String,
+    sales: json['sales'] as int,
+    expenses: json['expenses'] as int,
+  );
+
+  final String period;
+  final Cents sales;
+  final Cents expenses;
+}
+
+enum ExportKind {
+  journal('journal', 'Libro diario'),
+  trialBalance('trial_balance', 'Balance de comprobación');
+
+  const ExportKind(this.wire, this.label);
+  final String wire;
+  final String label;
+}

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../session/session.dart';
 import '../ui/brand.dart';
+import 'contacts_screen.dart';
 import 'home_screen.dart';
 import 'more_screen.dart';
 import 'movements_screen.dart';
@@ -21,12 +22,13 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
 
-  /// Cambia cuando se registra algo, para que Inicio y Movimientos se actualicen.
+  /// Cambia cuando se registra algo, para que las pestañas se actualicen.
   final ValueNotifier<int> _changes = ValueNotifier(0);
 
   static const _destinations = [
     (Icons.home_outlined, Icons.home, 'Inicio'),
     (Icons.receipt_long_outlined, Icons.receipt_long, 'Movimientos'),
+    (Icons.people_alt_outlined, Icons.people_alt, 'Clientes'),
     (Icons.workspace_premium_outlined, Icons.workspace_premium, 'Mi plan'),
     (Icons.menu, Icons.menu, 'Más'),
   ];
@@ -43,23 +45,21 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final company = widget.session.company!;
     final pages = [
-      HomeScreen(session: widget.session, changes: _changes, onOpenPlan: () => _goTo(2)),
+      HomeScreen(session: widget.session, changes: _changes, onOpenPlan: () => _goTo(3)),
       MovementsScreen(session: widget.session, changes: _changes),
+      ContactsScreen(session: widget.session, changes: _changes),
       PlanScreen(session: widget.session),
-      MoreScreen(session: widget.session),
+      MoreScreen(session: widget.session, changes: _changes),
     ];
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final body = IndexedStack(index: _tab, children: pages);
-    final title = Row(
-      children: [
-        const ContabiliMark(size: 30),
-        const SizedBox(width: 10),
-        Flexible(child: Text(company.legalName, overflow: TextOverflow.ellipsis)),
-      ],
+    final appBar = AppBar(
+      title: BrandTitle(text: company.legalName),
+      bottom: const PreferredSize(preferredSize: Size.fromHeight(8), child: TocapuBand(height: 8)),
     );
     if (wide) {
       return Scaffold(
-        appBar: AppBar(title: title),
+        appBar: appBar,
         body: Row(
           children: [
             NavigationRail(
@@ -82,7 +82,7 @@ class _HomeShellState extends State<HomeShell> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: title),
+      appBar: appBar,
       body: body,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,

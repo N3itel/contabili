@@ -107,6 +107,9 @@ void main() {
       expect(shiftPeriod('2026-01', -1), '2025-12');
       expect(shiftPeriod('2026-12', 1), '2027-01');
       expect(formatDate('2026-03-31'), '31/03/2026');
+      expect(periodBounds('2026-02'), ('2026-02-01', '2026-02-28'));
+      expect(periodBounds('2028-02'), ('2028-02-01', '2028-02-29'));
+      expect(periodBounds('2026-12'), ('2026-12-01', '2026-12-31'));
     });
   });
 }

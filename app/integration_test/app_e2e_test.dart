@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:contabili/api/http_api.dart';
 import 'package:contabili/api/session_store.dart';
 import 'package:contabili/app.dart';
+import 'package:contabili/core/dates.dart';
 import 'package:contabili/core/ruc.dart';
 import 'package:contabili/session/session.dart';
 import 'package:flutter/material.dart';
@@ -77,7 +78,7 @@ String _randomRuc() {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('de punta a punta: ingreso, empresa, venta y resumen', (tester) async {
+  testWidgets('de punta a punta: ingreso, empresa, ventas, clientes e impuestos', (tester) async {
     expect(_api, isNotEmpty, reason: 'Falta --dart-define=CONTABILI_API');
     final store = MemorySessionStore();
     final api = HttpContabiliApi(baseUrl: Uri.parse(_api), store: store);
@@ -148,9 +149,49 @@ void main() {
     expect(find.text('Gasto: servicios'), findsOneWidget);
     await _shot(tester, '7-movimientos');
 
+    // Un cliente nuevo y una venta al crédito a su nombre.
+    await _tap(tester, 'Clientes');
+    await _waitFor(tester, find.text('Agregar cliente'));
+    await _tap(tester, 'Agregar cliente');
+    await tester.enterText(
+      find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)).first,
+      'Comercial Andina',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+    await _settle(tester);
+    await _waitFor(tester, find.text('Comercial Andina'));
+
+    await _tap(tester, 'Inicio');
+    await _tap(tester, 'Vendí');
+    await tester.enterText(find.byType(TextField).first, '236');
+    await _tap(tester, 'Me lo deben');
+    await _waitFor(tester, find.widgetWithText(ChoiceChip, 'Comercial Andina'));
+    await _tap(tester, 'Comercial Andina');
+    await _tap(tester, 'Guardar');
+    await _waitFor(tester, find.text('¡Listo, quedó anotado!'));
+    await _tap(tester, 'Listo');
+    await _waitFor(tester, find.text('Tus últimos meses'));
+    await _shot(tester, '8-inicio-grafico');
+
+    await _tap(tester, 'Clientes');
+    await _waitFor(tester, find.text('S/ 236.00'));
+    expect(find.text('Te deben en total'), findsOneWidget);
+    await _shot(tester, '9-clientes');
+
+    // Impuestos del servidor: IGV 18 + 36 de ventas menos 9 de la factura = 45.
+    final month = monthName(limaDate(DateTime.now()).substring(0, 7));
+    await _tap(tester, 'Inicio');
+    await _tap(tester, 'Impuestos de $month');
+    await _waitFor(tester, find.text('Le tocaría pagar a SUNAT por $month'));
+    expect(find.text('S/ 45.00'), findsOneWidget);
+    await _shot(tester, '10-impuestos');
+    await tester.tap(find.byTooltip('Atrás'));
+    await _settle(tester);
+
     await _tap(tester, 'Mi plan');
     await _waitFor(tester, find.text('Prueba gratis del plan Negocio'));
     expect(find.text('Pagar S/ 490.00'), findsOneWidget);
-    await _shot(tester, '8-mi-plan');
+    await _shot(tester, '11-mi-plan');
   });
 }

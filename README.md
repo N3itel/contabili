@@ -2,9 +2,12 @@
 
 Contabilidad y finanzas para pymes peruanas, tan fácil que la pueda llevar un
 dueño sin experiencia: anota «vendí», «gasté», «cobré» o «pagué» y Contabili
-arma los asientos del PCGE, separa el IGV según su régimen y le dice cómo va
-su negocio. Se usa en el celular y en la computadora, con una licencia por
-empresa que se paga en el sitio o en la app.
+arma los asientos del PCGE, separa el IGV según su régimen, le dice cuánto le
+toca pagar a SUNAT y cómo va su negocio. Se usa en el celular y en la
+computadora, con una licencia por empresa que se paga en el sitio o en la app.
+
+**Está en beta**: todavía no se publica en Play ni en App Store; las versiones
+de prueba se compilan desde GitHub Actions.
 
 ## Qué hay hoy
 
@@ -13,19 +16,30 @@ empresa que se paga en el sitio o en la app.
     15 minutos y renovación que rota (un token reutilizado cierra todo).
   - Empresas por RUC y régimen tributario. Personas por empresa con rol
     (dueño, contador, consulta) que entran por invitación a su celular.
-  - **Operaciones fáciles**: venta, gasto, cobro y pago sin debe ni haber, con
-    una explicación en palabras simples de lo que se registró.
+  - **Operaciones fáciles**: venta, gasto, cobro, pago y pago de impuestos sin
+    debe ni haber, con una explicación en palabras simples de lo que se registró.
+  - **Clientes y proveedores**: cuánto debe cada cliente y cuánto se le debe a
+    cada proveedor, con sus movimientos.
   - **Resumen del mes**: plata en caja y bancos, por cobrar, por pagar, IGV,
-    ventas, gastos y resultado.
+    ventas, gastos y resultado; y la tendencia de los últimos meses.
+  - **Impuestos del mes**: IGV (con el saldo a favor que pasa de mes a mes) y
+    renta o cuota del Nuevo RUS según el régimen, como estimado.
+  - **Descargas para Excel**: libro diario y balance de comprobación en CSV, con
+    enlaces firmados que vencen en 5 minutos.
   - Plan de cuentas PCGE, libro diario inmutable (se corrige con extornos),
     libro mayor, balance de comprobación y **cierre mensual**.
   - **Licencias**: 30 días gratis por empresa; luego plan Emprendedor o
     Negocio, por mes o por año, pagado con Yape o tarjeta (Culqi). Vencida, la
     empresa queda en solo lectura.
 - **App** (`app/`): Flutter, un solo código para Android, iPhone, Windows, Mac
-  y Linux. Inicio con el resumen y cuatro botones grandes (Vendí, Gasté, Cobré,
-  Pagué), movimientos con anular, cierre de mes, Mi plan (paga en el navegador)
-  y equipo. Probada con letra al 150 % y de punta a punta contra el backend.
+  y Linux. Inicio con el resumen, cuatro botones grandes (Vendí, Gasté, Cobré,
+  Pagué), los impuestos del mes y el gráfico de los últimos meses; movimientos
+  con anular, cierre de mes y descarga para Excel; clientes y proveedores; Mi
+  plan (paga en el navegador) y equipo. Probada con letra al 150 % y de punta a
+  punta contra el backend.
+- **Diseño incaico moderno**: la marca es una chakana de terracota con el Inti
+  y un visto bueno («todo cuadra»); franjas tocapu, paleta andina (terracota,
+  oro, añil, verde y papel) y la letra Figtree, iguales en el sitio y la app.
 - **Sitio público** (lo sirve el backend): portada, `/precios`, `/descargas`,
   `/mi-plan` (ingresar y pagar desde el navegador), `/pagar/<orden>` y los
   borradores de `/terminos` y `/privacidad`.
@@ -33,7 +47,8 @@ empresa que se paga en el sitio o en la app.
 ## API
 
 La API vive en `/api/v1`. Todas las rutas piden `Authorization: Bearer <token>`
-salvo `/auth/*`, `/app/config` y las de la página de pago (`/payments/*`). Los montos van en céntimos (S/ 118,00 = `11800`) y las fechas como
+salvo `/auth/*`, `/app/config`, las de la página de pago (`/payments/*`) y las
+descargas con enlace firmado (`/exports/:token`). Los montos van en céntimos (S/ 118,00 = `11800`) y las fechas como
 `AAAA-MM-DD`. Los errores responden `{ code, message }`: `code` es estable y
 `message` va en español.
 
@@ -50,6 +65,10 @@ salvo `/auth/*`, `/app/config` y las de la página de pago (`/payments/*`). Los 
 | `GET` · `POST /companies/:id/accounts` | consulta · contador | Plan de cuentas y subcuentas |
 | `POST /companies/:id/operations` | contador | Venta, gasto, cobro o pago: el asiento se arma solo |
 | `GET /companies/:id/summary?period=AAAA-MM` | consulta | Resumen de finanzas del mes |
+| `GET /companies/:id/taxes?period=AAAA-MM` | consulta | Impuestos del mes (estimado) |
+| `GET /companies/:id/trend?months=N` | consulta | Ventas y gastos de los últimos meses |
+| `GET` · `POST /companies/:id/contacts`, `GET` · `PATCH …/:contactId` | consulta · contador | Clientes y proveedores, con lo que deben |
+| `POST /companies/:id/exports` | consulta | Enlace para descargar el diario o el balance en CSV (5 min) |
 | `POST /companies/:id/journal` | contador | Registrar un asiento |
 | `GET /companies/:id/journal?period=AAAA-MM&after=N` | consulta | Diario del mes, de a 100 |
 | `GET /companies/:id/journal/:entryId` | consulta | Un asiento |
@@ -60,6 +79,7 @@ salvo `/auth/*`, `/app/config` y las de la página de pago (`/payments/*`). Los 
 | `GET /companies/:id/billing` | consulta | Plan, días que quedan y pagos |
 | `POST /companies/:id/billing/orders` | dueño | Orden de pago: devuelve `checkoutUrl` |
 | `GET /app/config` | — | Planes, descargas y versión de los términos para las apps |
+| `GET /exports/:token` | — (enlace firmado) | La descarga en sí |
 
 Con la licencia vencida, las rutas que registran responden 402 `license_expired`;
 las de consulta siguen funcionando.
@@ -74,7 +94,7 @@ Sin `from`/`to`, los reportes van del 1 de enero hasta hoy (hora de Lima).
 4. ~~App Flutter para Android, iOS, Windows, macOS y Linux.~~ Falta: instaladores
    firmados (MSIX, DMG notarizado, .deb, Play y App Store) y publicarlos en `/descargas`.
 5. Avisos antes de que venza el plan; comprobante electrónico de cada pago de licencia.
-6. Registro de ventas y de compras desde comprobantes; exportar a Excel y PDF.
+6. Registro de ventas y de compras desde comprobantes; exportar a PDF.
 7. Facturación electrónica (OSE/PSE) y libros electrónicos PLE.
 
 ## Desarrollo
@@ -98,7 +118,8 @@ flutter run --dart-define=CONTABILI_API=http://localhost:3000/api/v1 \
   --dart-define=CONTABILI_WEB=http://localhost:3000
 ```
 
-Antes de subir: `dart format . && flutter analyze --fatal-infos && flutter test`. La
+Antes de subir: `dart format . && flutter analyze --fatal-infos && flutter test`. Los
+íconos salen de `python3 tools/iconos.py` (lee la chakana de `backend/src/web/brand.ts`). La
 prueba de punta a punta (`integration_test/`) corre en el CI contra el backend real;
 las versiones para descargar se compilan desde Actions → App → Run workflow.
 

@@ -5,6 +5,7 @@ import '../api/api.dart';
 import '../core/dates.dart';
 import '../core/money.dart';
 import '../core/operations.dart';
+import '../core/ruc.dart';
 import '../session/session.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
@@ -35,8 +36,8 @@ enum OperationType {
     'Anotar un cobro',
     'Anotar otro cobro',
     Icons.savings_outlined,
-    ContabiliColors.green,
-    Color(0xFFEFF6F1),
+    ContabiliColors.amber,
+    ContabiliColors.goldSoft,
   ),
   payment(
     'Pagué',
@@ -44,9 +45,21 @@ enum OperationType {
     'Anotar un pago',
     'Anotar otro pago',
     Icons.outbox_outlined,
-    ContabiliColors.amber,
-    ContabiliColors.amberSoft,
+    ContabiliColors.indigo,
+    ContabiliColors.indigoSoft,
+  ),
+  taxPayment(
+    'Pagué impuestos',
+    'IGV o renta a SUNAT',
+    'Anotar un pago a SUNAT',
+    'Anotar otro pago a SUNAT',
+    Icons.account_balance_outlined,
+    ContabiliColors.terracotta,
+    ContabiliColors.terracottaSoft,
   );
+
+  /// Los cuatro botones grandes de Inicio.
+  static const home = [sale, expense, collection, payment];
 
   const OperationType(
     this.verb,
@@ -70,10 +83,20 @@ enum OperationType {
 /// Anotar lo que pasó, sin debe ni haber: monto, cómo se pagó y listo. Muestra
 /// antes de guardar cuánto es IGV y, al guardar, qué se registró en palabras simples.
 class OperationScreen extends StatefulWidget {
-  const OperationScreen({super.key, required this.session, required this.type});
+  const OperationScreen({
+    super.key,
+    required this.session,
+    required this.type,
+    this.initialTotal,
+    this.initialTax = TaxKind.igv,
+  });
 
   final SessionController session;
   final OperationType type;
+
+  /// Monto sugerido (por ejemplo, el IGV del mes al anotar su pago).
+  final Cents? initialTotal;
+  final TaxKind initialTax;
 
   @override
   State<OperationScreen> createState() => _OperationScreenState();
@@ -88,6 +111,9 @@ class _OperationScreenState extends State<OperationScreen> {
   Settlement _settlement = Settlement.cash;
   Money _money = Money.cash;
   bool _withInvoice = true;
+  late TaxKind _tax = widget.initialTax;
+  Contact? _contact;
+  List<Contact>? _contacts;
   late String _date = limaDate(DateTime.now());
   bool _busy = false;
   String? _error;
@@ -113,7 +139,49 @@ class _OperationScreenState extends State<OperationScreen> {
       ),
       OperationType.collection => Collection(total, into: _money),
       OperationType.payment => Payment(total, from: _money),
+      OperationType.taxPayment => TaxPayment(total, tax: _tax, from: _money),
     };
+  }
+
+  /// Cliente o proveedor que pide la operación tal como está elegida.
+  ContactKind? get _contactKind => switch (widget.type) {
+    OperationType.sale => _settlement == Settlement.credit ? ContactKind.customer : null,
+    OperationType.expense => _settlement == Settlement.credit ? ContactKind.supplier : null,
+    OperationType.collection => ContactKind.customer,
+    OperationType.payment => ContactKind.supplier,
+    OperationType.taxPayment => null,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialTotal;
+    if (initial != null && initial > 0) {
+      _amount.text = (initial / 100).toStringAsFixed(2);
+    }
+    _loadContacts();
+  }
+
+  Future<void> _loadContacts() async {
+    try {
+      final list = await widget.session.api.contacts(_company.id);
+      if (mounted) setState(() => _contacts = list);
+    } on ApiException {
+      // Sin la lista, se puede anotar igual (sin cliente ni proveedor).
+      if (mounted) setState(() => _contacts = const []);
+    }
+  }
+
+  Future<void> _newContact(ContactKind kind) async {
+    final created = await showDialog<Contact>(
+      context: context,
+      builder: (_) => NewContactDialog(session: widget.session, kind: kind),
+    );
+    if (created == null) return;
+    setState(() {
+      _contacts = [...?_contacts, created];
+      _contact = created;
+    });
   }
 
   /// La factura solo cambia algo si la empresa cobra IGV y el gasto lo lleva.
@@ -147,11 +215,13 @@ class _OperationScreenState extends State<OperationScreen> {
     });
     try {
       final reference = _reference.text.trim();
+      final contact = _contactKind == null ? null : _contact;
       final result = await widget.session.api.recordOperation(
         _company.id,
         operation,
         date: _date,
         reference: reference.isEmpty ? null : reference,
+        contactId: contact?.id,
       );
       if (!mounted) return;
       await _showDone(result.explanation);
@@ -255,7 +325,7 @@ class _OperationScreenState extends State<OperationScreen> {
                         OperationType.sale => '¿Cuánto vendiste?',
                         OperationType.expense => '¿Cuánto gastaste?',
                         OperationType.collection => '¿Cuánto te pagaron?',
-                        OperationType.payment => '¿Cuánto pagaste?',
+                        OperationType.payment || OperationType.taxPayment => '¿Cuánto pagaste?',
                       },
                       helperText: switch (type) {
                         OperationType.sale ||
@@ -267,6 +337,19 @@ class _OperationScreenState extends State<OperationScreen> {
                   ),
                   const SizedBox(height: 22),
                   ..._details(),
+                  if (_contactKind case final kind?) ...[
+                    const SizedBox(height: 18),
+                    _ContactPicker(
+                      kind: kind,
+                      contacts: [
+                        for (final c in _contacts ?? const <Contact>[])
+                          if (c.kind == kind) c,
+                      ],
+                      selected: _contact?.kind == kind ? _contact : null,
+                      onChanged: (c) => setState(() => _contact = c),
+                      onNew: () => _newContact(kind),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -371,6 +454,28 @@ class _OperationScreenState extends State<OperationScreen> {
             ),
           ],
         ];
+      case OperationType.taxPayment:
+        return [
+          ChoiceRow<TaxKind>(
+            label: '¿Qué impuesto pagaste?',
+            value: _tax,
+            onChanged: (v) => setState(() => _tax = v),
+            options: const [
+              (TaxKind.igv, 'IGV', Icons.receipt_outlined),
+              (TaxKind.income, 'Renta', Icons.trending_up),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ChoiceRow<Money>(
+            label: '¿De dónde salió la plata?',
+            value: _money,
+            onChanged: (v) => setState(() => _money = v),
+            options: const [
+              (Money.cash, 'Efectivo', Icons.payments_outlined),
+              (Money.bank, 'Banco o Yape', Icons.account_balance_outlined),
+            ],
+          ),
+        ];
       case OperationType.collection:
       case OperationType.payment:
         return [
@@ -400,7 +505,9 @@ class _Preview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final op = operation;
-    if (op == null || op is Collection || op is Payment) return const SizedBox.shrink();
+    if (op == null || op is Collection || op is Payment || op is TaxPayment) {
+      return const SizedBox.shrink();
+    }
     final split = operationIgv(op, regime);
     final text = split.igv > 0
         ? '${formatSoles(split.base)} ${op is Sale ? 'es tu venta' : 'es tu gasto'} y '
@@ -409,5 +516,159 @@ class _Preview extends StatelessWidget {
         ? 'No lleva IGV que descontar.'
         : 'En el Nuevo RUS no se separa el IGV.';
     return Notice(text: text);
+  }
+}
+
+/// Elegir a quién se le vendió o compró al crédito (o quién pagó), o agregarlo.
+class _ContactPicker extends StatelessWidget {
+  const _ContactPicker({
+    required this.kind,
+    required this.contacts,
+    required this.selected,
+    required this.onChanged,
+    required this.onNew,
+  });
+
+  final ContactKind kind;
+  final List<Contact> contacts;
+  final Contact? selected;
+  final ValueChanged<Contact?> onChanged;
+  final VoidCallback onNew;
+
+  @override
+  Widget build(BuildContext context) {
+    final customer = kind == ContactKind.customer;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          customer ? '¿Qué cliente? (opcional)' : '¿Qué proveedor? (opcional)',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          customer
+              ? 'Así sabrás cuánto te debe cada cliente.'
+              : 'Así sabrás cuánto le debes a cada proveedor.',
+          style: const TextStyle(color: ContabiliColors.ink2),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final c in contacts)
+              ChoiceChip(
+                label: Text(c.name),
+                selected: selected?.id == c.id,
+                showCheckmark: false,
+                onSelected: (on) => onChanged(on ? c : null),
+              ),
+            ActionChip(
+              avatar: const Icon(Icons.person_add_alt, size: 20),
+              label: Text(customer ? 'Nuevo cliente' : 'Nuevo proveedor'),
+              onPressed: onNew,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Agregar un cliente o proveedor: nombre y, si es empresa, su RUC.
+class NewContactDialog extends StatefulWidget {
+  const NewContactDialog({super.key, required this.session, required this.kind});
+
+  final SessionController session;
+  final ContactKind kind;
+
+  @override
+  State<NewContactDialog> createState() => _NewContactDialogState();
+}
+
+class _NewContactDialogState extends State<NewContactDialog> {
+  final _name = TextEditingController();
+  final _ruc = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _ruc.dispose();
+    super.dispose();
+  }
+
+  String? get _rucProblem {
+    final ruc = _ruc.text;
+    if (ruc.isEmpty || ruc.length < 11) return null;
+    return isValidRuc(ruc) ? null : 'Ese RUC no es válido.';
+  }
+
+  bool get _ready =>
+      _name.text.trim().length >= 2 && (_ruc.text.isEmpty || isValidRuc(_ruc.text)) && !_busy;
+
+  Future<void> _save() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final contact = await widget.session.api.createContact(
+        widget.session.company!.id,
+        kind: widget.kind,
+        name: _name.text.trim(),
+        ruc: _ruc.text.isEmpty ? null : _ruc.text,
+      );
+      if (mounted) Navigator.of(context).pop(contact);
+    } on ApiException catch (error) {
+      setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final customer = widget.kind == ContactKind.customer;
+    return AlertDialog(
+      title: Text(customer ? 'Nuevo cliente' : 'Nuevo proveedor'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Nombre'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ruc,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(11),
+              ],
+              decoration: InputDecoration(labelText: 'RUC (si es empresa)', errorText: _rucProblem),
+              onChanged: (_) => setState(() {}),
+            ),
+            ErrorText(_error),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+          onPressed: _ready ? _save : null,
+          child: Text(_busy ? 'Guardando…' : 'Guardar'),
+        ),
+      ],
+    );
   }
 }

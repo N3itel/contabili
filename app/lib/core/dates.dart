@@ -47,3 +47,11 @@ String formatDate(String date) =>
 
 /// Para mostrar una fecha con hora del servidor, en Lima: '16/11/2026'.
 String formatInstant(DateTime at) => formatDate(limaDate(at));
+
+/// Primer y último día de un mes: periodBounds('2026-02') → ('2026-02-01', '2026-02-28').
+(String, String) periodBounds(String period) {
+  final year = int.parse(period.substring(0, 4));
+  final month = int.parse(period.substring(5, 7));
+  final last = DateTime.utc(year, month + 1, 0).day;
+  return ('$period-01', '$period-${_two(last)}');
+}

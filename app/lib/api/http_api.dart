@@ -119,11 +119,17 @@ class HttpContabiliApi implements ContabiliApi {
     Operation operation, {
     String? date,
     String? reference,
+    String? contactId,
   }) async {
     final json = await _json(
       'POST',
       '${_company(companyId)}/operations',
-      body: {'operation': operation.toJson(), 'date': ?date, 'reference': ?reference},
+      body: {
+        'operation': operation.toJson(),
+        'date': ?date,
+        'reference': ?reference,
+        'contactId': ?contactId,
+      },
     );
     return OperationResult(
       entry: JournalEntry.fromJson(json['entry'] as Json),
@@ -166,6 +172,60 @@ class HttpContabiliApi implements ContabiliApi {
       body: {'plan': plan, 'cycle': cycle.wire},
     );
     return Uri.parse(json['checkoutUrl'] as String);
+  }
+
+  @override
+  Future<List<Contact>> contacts(String companyId, {ContactKind? kind}) async => [
+    for (final c in await _list(
+      'GET',
+      '${_company(companyId)}/contacts${kind == null ? '' : '?kind=${kind.wire}'}',
+    ))
+      Contact.fromJson(c as Json),
+  ];
+
+  @override
+  Future<Contact> createContact(
+    String companyId, {
+    required ContactKind kind,
+    required String name,
+    String? ruc,
+  }) async => Contact.fromJson(
+    await _json(
+      'POST',
+      '${_company(companyId)}/contacts',
+      body: {'kind': kind.wire, 'name': name, 'ruc': ?ruc},
+    ),
+  );
+
+  @override
+  Future<ContactDetail> contact(String companyId, String contactId) async => ContactDetail.fromJson(
+    await _json('GET', '${_company(companyId)}/contacts/${_id(contactId)}'),
+  );
+
+  @override
+  Future<MonthlyTaxes> taxes(String companyId, {String? period}) async => MonthlyTaxes.fromJson(
+    await _json('GET', '${_company(companyId)}/taxes${period == null ? '' : '?period=$period'}'),
+  );
+
+  @override
+  Future<List<TrendPoint>> trend(String companyId, {int months = 6}) async => [
+    for (final p in await _list('GET', '${_company(companyId)}/trend?months=$months'))
+      TrendPoint.fromJson(p as Json),
+  ];
+
+  @override
+  Future<Uri> exportLink(
+    String companyId, {
+    required ExportKind kind,
+    required String from,
+    required String to,
+  }) async {
+    final json = await _json(
+      'POST',
+      '${_company(companyId)}/exports',
+      body: {'kind': kind.wire, 'from': from, 'to': to},
+    );
+    return Uri.parse(json['url'] as String);
   }
 
   @override

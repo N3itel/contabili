@@ -170,8 +170,30 @@ class FakeContabiliApi implements ContabiliApi {
     Operation operation, {
     String? date,
     String? reference,
+    String? contactId,
   }) async {
     _check();
+    if (contactId != null) {
+      final contact = _contacts.firstWhere((c) => c.id == contactId);
+      if (contact.kind != operationContactKind(operation)) {
+        throw const ApiException(
+          status: 400,
+          code: 'contact_wrong_kind',
+          message: 'Ese contacto no corresponde a esta operación.',
+        );
+      }
+      final change = switch (operation) {
+        Collection() || Payment() => -operation.total,
+        _ => operation.total,
+      };
+      _contacts[_contacts.indexOf(contact)] = Contact(
+        id: contact.id,
+        kind: contact.kind,
+        name: contact.name,
+        ruc: contact.ruc,
+        balance: contact.balance + change,
+      );
+    }
     final company = _companies.firstWhere((c) => c.id == companyId);
     final split = operationIgv(operation, company.taxRegime);
     final s = _summary(companyId);
@@ -221,6 +243,13 @@ class FakeContabiliApi implements ContabiliApi {
           incoming: false,
         );
         description = 'Pago a proveedor';
+      case TaxPayment(:final from, :final tax):
+        money(
+          from == Money.cash ? Settlement.cash : Settlement.bank,
+          operation.total,
+          incoming: false,
+        );
+        description = tax == TaxKind.igv ? 'Pago de IGV a SUNAT' : 'Pago a cuenta de renta a SUNAT';
     }
     _summaries[companyId] = Summary(
       period: s.period,
@@ -361,6 +390,101 @@ class FakeContabiliApi implements ContabiliApi {
   ];
 
   final List<(String, Role)> invited = [];
+  final List<Contact> _contacts = [];
+  final List<(ExportKind, String, String)> exports = [];
+
+  @override
+  Future<List<Contact>> contacts(String companyId, {ContactKind? kind}) async => [
+    for (final c in _contacts)
+      if (kind == null || c.kind == kind) c,
+  ];
+
+  @override
+  Future<Contact> createContact(
+    String companyId, {
+    required ContactKind kind,
+    required String name,
+    String? ruc,
+  }) async {
+    _check();
+    final contact = Contact(id: _uuid(), kind: kind, name: name, ruc: ruc, balance: 0);
+    _contacts.add(contact);
+    return contact;
+  }
+
+  @override
+  Future<ContactDetail> contact(String companyId, String contactId) async {
+    final contact = _contacts.firstWhere((c) => c.id == contactId);
+    return ContactDetail(contact, [
+      if (contact.balance != 0)
+        ContactMovement(
+          entryDate: '$period-17',
+          description: 'Venta de mercadería al crédito',
+          amount: contact.balance,
+          balance: contact.balance,
+        ),
+    ]);
+  }
+
+  @override
+  Future<MonthlyTaxes> taxes(String companyId, {String? period}) async {
+    _check();
+    final company = _companies.firstWhere((c) => c.id == companyId);
+    final s = _summary(companyId);
+    final nrus = company.taxRegime == TaxRegime.nrus;
+    final igvToPay = s.igvMonth > 0 ? (s.igvMonth / 100).round() * 100 : 0;
+    final income = nrus ? 2000 : (s.sales / 100 / 100).round() * 100;
+    return MonthlyTaxes(
+      period: period ?? this.period,
+      regime: company.taxRegime,
+      igv: nrus
+          ? null
+          : IgvMonth(
+              sales: s.igvMonth > 0 ? s.igvMonth : 0,
+              purchases: s.igvMonth < 0 ? -s.igvMonth : 0,
+              previousCredit: 0,
+              toPay: igvToPay,
+              nextCredit: s.igvMonth < 0 ? -s.igvMonth : 0,
+            ),
+      incomeBase: s.sales,
+      incomeRatePercent: nrus ? null : 1,
+      nrusCategory: nrus ? 1 : null,
+      incomeAmount: income,
+      total: igvToPay + income,
+      notes: const ['Es un estimado con lo que registraste en Contabili.'],
+    );
+  }
+
+  @override
+  Future<List<TrendPoint>> trend(String companyId, {int months = 6}) async {
+    final s = _summary(companyId);
+    return [
+      for (var i = months - 1; i >= 0; i--)
+        TrendPoint(
+          period: _shift(period, -i),
+          sales: i == 0 ? s.sales : 0,
+          expenses: i == 0 ? s.expenses : 0,
+        ),
+    ];
+  }
+
+  static String _shift(String period, int months) {
+    final index =
+        int.parse(period.substring(0, 4)) * 12 + int.parse(period.substring(5)) - 1 + months;
+    return '${index ~/ 12}-${(index % 12 + 1).toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Future<Uri> exportLink(
+    String companyId, {
+    required ExportKind kind,
+    required String from,
+    required String to,
+  }) async {
+    _check();
+    exports.add((kind, from, to));
+    return Uri.parse('https://contabili.pe/api/v1/exports/enlace-de-prueba');
+  }
 
   @override
   Future<void> invite(String companyId, {required String phone, required Role role}) async {

@@ -40,6 +40,14 @@ Guía para quien programe en este repositorio (personas o Claude).
 - El resumen (`summary-rules.ts`) habla de plata, por cobrar, por pagar, IGV y resultado del mes; el resultado es aproximado (sin costo de ventas) y así se dice.
 - Los mensajes de error dicen qué hacer, no solo qué falló («Usa una fecha posterior o pide al dueño que reabra el mes»).
 
+## Clientes, impuestos y descargas
+
+- Clientes y proveedores (`contacts`): el saldo de cada uno sale de las líneas de la 1212 (clientes) o la 4212 (proveedores) con su `contact_id` (clave foránea compuesta). Ventas y compras al crédito, cobros y pagos aceptan un contacto del tipo que corresponde (`operationContactKind`): `contact_not_needed`, `contact_wrong_kind`, `contact_not_found`. Un RUC no se repite por empresa y tipo (`contact_exists`).
+- Cada asiento guarda de dónde salió (`journal_entries.source`: manual, sale, expense, collection, payment, tax_payment o reversal; check en la base).
+- Impuestos del mes (`tax/monthly-taxes.ts`): IGV de ventas menos el de compras con factura, con el saldo a favor que pasa al mes siguiente; renta según el régimen (RMT 1 % hasta 300 UIT en el año y luego 1,5 %; RER y General 1,5 %; Nuevo RUS, cuota fija por categoría). Se redondea a soles enteros, como SUNAT. Es un estimado y la pantalla lo dice. Al empezar un año, agrega su UIT a `UIT_BY_YEAR`.
+- Pagar impuestos es una operación más (`tax_payment`): baja el IGV por pagar (40111) o la renta (4017) contra caja o banco. La app la abre con el monto ya escrito desde «Ya pagué el IGV».
+- Descargas para Excel (`exports`): la app pide un enlace firmado (JWT con audiencia `contabili-export`, 5 minutos) y lo abre en el navegador; al descargar se vuelve a revisar que la persona siga en la empresa. CSV en UTF-8 con BOM y comas (`accounting/csv.ts`), montos con punto decimal, y los textos que empiezan con `=`, `+`, `-` o `@` llevan `'` delante (inyección de fórmulas). Hasta un año por descarga (`range_too_large`).
+
 ## Licencias y cobros
 
 - La licencia es por empresa (`company_licenses`): nace con 30 días de prueba del plan Negocio. Planes y precios en `billing/plans.ts` (con IGV); el análisis está en `docs/precios.md` y `unit-economics.spec.ts` exige al menos 40 % de margen con el plan lleno. Al cambiar un precio o un proveedor, actualiza los supuestos de `COSTS`.
@@ -55,6 +63,18 @@ Guía para quien programe en este repositorio (personas o Claude).
 - Los precios del sitio salen de `PLANS`; las descargas, de las variables `DOWNLOAD_*` y `APP_*`: solo se muestran las publicadas, nunca botones vacíos.
 - `/mi-plan` ingresa con SMS y guarda la sesión solo en memoria; al ir a pagar la cierra.
 - `/terminos` y `/privacidad` son borradores para revisión legal: al cambiarlos, sube `TERMS_VERSION`.
+
+## Diseño incaico moderno
+
+- La marca es una chakana de terracota con el Inti (círculo de oro) y un visto bueno de tinta: «todo cuadra». El contorno y los colores viven en `backend/src/web/brand.ts` (`BRAND`, `CHAKANA_POINTS`); la app los replica en `app/lib/ui/theme.dart` (`ContabiliColors`) y `app/lib/ui/brand.dart` (`ContabiliMark`). Si cambia uno, cambia el otro.
+- Paleta: terracota (acción principal), oro (realces y avisos), añil, verde (ingresos y «vas ganando»), rojo (errores y «vas perdiendo») y tinta sobre papel. Los textos sobre color usan la versión oscura y los fondos la suave: el contraste siempre AA.
+- La franja tocapu (`TocapuBand` en la app, `TOCAPU_BAND` en el sitio) va bajo la barra superior y al pie, nunca detrás de texto.
+- Letra Figtree (OFL), servida por el propio backend en el sitio y empaquetada en la app.
+- Los íconos de la app salen de `python3 tools/iconos.py`, que lee la chakana de `brand.ts`: no los edites a mano.
+
+## Beta
+
+- Contabili está en beta: el sello «BETA» se ve en la barra de la app y en el sitio. No se publica en Play ni en App Store hasta decidirlo; las versiones de prueba se compilan con Actions → App → Run workflow.
 
 ## App
 
