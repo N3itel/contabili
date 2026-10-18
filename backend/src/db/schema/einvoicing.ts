@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   date,
   foreignKey,
@@ -85,6 +86,8 @@ export const einvoices = pgTable(
     baseCents: bigint('base_cents', { mode: 'number' }).notNull(),
     igvCents: bigint('igv_cents', { mode: 'number' }).notNull(),
     totalCents: bigint('total_cents', { mode: 'number' }).notNull(),
+    /** Emitido en el Nuevo RUS: solo boletas de prueba, sin separar el IGV. */
+    nrus: boolean('nrus').notNull().default(false),
     status: varchar('status', { length: 10 }).notNull(),
     statusMessage: varchar('status_message', { length: 500 }),
     pdfUrl: varchar('pdf_url', { length: 500 }),
@@ -151,6 +154,11 @@ export const einvoices = pgTable(
     check(
       'einvoices_amounts',
       sql`${t.baseCents} >= 0 AND ${t.igvCents} >= 0 AND ${t.baseCents} + ${t.igvCents} = ${t.totalCents} AND ${t.totalCents} > 0`,
+    ),
+    // En el Nuevo RUS, la beta solo emite boletas de prueba y el IGV no se separa.
+    check(
+      'einvoices_nrus',
+      sql`NOT ${t.nrus} OR (${t.provider} = 'test' AND ${t.docType} <> '01' AND ${t.igvCents} = 0)`,
     ),
     // Solo se anota la venta de un comprobante que salió (o de prueba).
     check(

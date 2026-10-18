@@ -156,9 +156,6 @@ describe('facturación electrónica beta (e2e)', () => {
   });
 
   it('reglas: Nuevo RUS, factura con RUC, boleta grande con DNI', async () => {
-    const nrus = await company('nrus');
-    expect((await configure(nrus).expect(400)).body.code).toBe('einvoice_nrus');
-
     const id = await company();
     await configure(id).expect(200);
     expect(
@@ -520,5 +517,87 @@ describe('facturación electrónica beta (e2e)', () => {
         }),
       ),
     ).toBe('documents_credit_note');
+  });
+
+  it('Nuevo RUS: solo boletas de prueba, sin separar el IGV', async () => {
+    const id = await company('nrus');
+    const real = await configure(id, {
+      provider: 'nubefact',
+      facturaSeries: 'F001',
+      boletaSeries: 'B001',
+      endpoint: 'https://api.nubefact.com/api/v1/abc-123',
+      token: 'token-de-nubefact-123',
+    }).expect(400);
+    expect(real.body.code).toBe('einvoice_nrus_test_only');
+    await configure(id).expect(200);
+    const factura = await emit(id, {
+      ...boleta,
+      type: '01',
+      customer: { docType: 'ruc', number: randomRuc(), name: 'Comercial Andina SAC' },
+    }).expect(400);
+    expect(factura.body.code).toBe('nrus_no_factura');
+
+    const sold = await emit(id, boleta).expect(201);
+    expect(sold.body).toMatchObject({
+      recordError: null,
+      einvoice: { label: 'B001-00000001', status: 'test', base: 11800, igv: 0, recorded: true },
+    });
+    const register = await t.http
+      .get(`/companies/${id}/registers/sales`)
+      .set(owner.auth)
+      .expect(200);
+    expect(register.body.totals).toMatchObject({ base: 11800, igv: 0, total: 11800 });
+
+    // También se anula con nota de crédito de prueba.
+    const note = await creditNote(id, sold.body.einvoice.id).expect(201);
+    expect(note.body.einvoice).toMatchObject({ label: 'BC01-00000001', igv: 0, recorded: true });
+
+    const link = await t.http
+      .post(`/companies/${id}/einvoices/${sold.body.einvoice.id}/link`)
+      .set(owner.auth)
+      .expect(200);
+    const pdf = await t.web
+      .get(new URL(link.body.url).pathname)
+      .buffer(true)
+      .parse((res, done) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => done(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    if (SAMPLES) writeFileSync(`${SAMPLES}/boleta-nuevo-rus.pdf`, pdf.body as Buffer);
+
+    // La base no deja una boleta del Nuevo RUS con IGV ni con Nubefact.
+    const [row] = await t.db
+      .select()
+      .from(einvoices)
+      .where(eq(einvoices.id, sold.body.einvoice.id));
+    const { id: _id, createdAt: _c, updatedAt: _u, entryId: _e, ...copy } = row;
+    expect(
+      await constraintOf(
+        t.db.insert(einvoices).values({ ...copy, number: 2, baseCents: 10000, igvCents: 1800 }),
+      ),
+    ).toBe('einvoices_nrus');
+    expect(
+      await constraintOf(
+        t.db.insert(einvoices).values({ ...copy, number: 3, provider: 'nubefact' }),
+      ),
+    ).toBe('einvoices_nrus');
+  });
+
+  it('si la empresa pasa al Nuevo RUS con Nubefact conectado, no emite', async () => {
+    const id = await company();
+    await configure(id, {
+      provider: 'nubefact',
+      facturaSeries: 'F001',
+      boletaSeries: 'B001',
+      endpoint: 'https://api.nubefact.com/api/v1/abc-123',
+      token: 'token-de-nubefact-123',
+    }).expect(200);
+    await t.db.execute(sql`UPDATE companies SET tax_regime = 'nrus' WHERE id = ${id}`);
+    const calls = scripted.calls;
+    const out = await emit(id, boleta).expect(400);
+    expect(out.body.code).toBe('einvoice_nrus_test_only');
+    expect(scripted.calls).toBe(calls);
   });
 });

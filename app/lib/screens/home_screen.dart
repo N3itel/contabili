@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/api.dart';
 import '../core/dates.dart';
 import '../core/money.dart';
+import '../core/operations.dart';
 import '../session/session.dart';
 import '../ui/andean.dart';
 import '../ui/theme.dart';
@@ -158,7 +159,8 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _emitEinvoice,
             icon: const Icon(Icons.receipt_long_outlined),
             label: Text(
-              _einvoicing.isTest ? 'Emitir boleta o factura (prueba)' : 'Emitir boleta o factura',
+              '${_company.taxRegime == TaxRegime.nrus ? 'Emitir boleta' : 'Emitir boleta o factura'}'
+              '${_einvoicing.isTest ? ' (prueba)' : ''}',
             ),
           ),
         ],

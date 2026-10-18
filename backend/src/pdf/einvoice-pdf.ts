@@ -26,6 +26,8 @@ export interface EinvoicePdfInput {
   total: number;
   /** Modo de prueba: lleva la marca de agua y la aclaración. */
   test: boolean;
+  /** Nuevo RUS: el precio no separa el IGV. */
+  nrus: boolean;
   hash: string | null;
 }
 
@@ -63,17 +65,23 @@ export function einvoicePdf(input: EinvoicePdfInput): Promise<Buffer> {
     [
       { header: 'Cant.', width: 1, align: 'center' },
       { header: 'Descripción', width: 6 },
-      { header: 'Valor unitario', width: 2.2, align: 'right' },
+      { header: input.nrus ? 'Precio unitario' : 'Valor unitario', width: 2.2, align: 'right' },
       { header: 'Importe', width: 2.2, align: 'right' },
     ],
     [['1', input.description, formatSoles(input.base), formatSoles(input.total)]],
   );
   pdf.keyValues([
-    { label: 'Operación gravada', value: formatSoles(input.base) },
-    { label: 'IGV (18 %)', value: formatSoles(input.igv) },
+    ...(input.nrus
+      ? []
+      : [
+          { label: 'Operación gravada', value: formatSoles(input.base) },
+          { label: 'IGV (18 %)', value: formatSoles(input.igv) },
+        ]),
     { label: 'Importe total', value: formatSoles(input.total), strong: true },
   ]);
   pdf.note(amountInWords(input.total));
+  if (input.nrus)
+    pdf.note('Emisor del Nuevo RUS: el precio incluye los impuestos y no separa el IGV.');
   pdf.note(
     input.test
       ? 'Comprobante de prueba generado en Contabili (beta): no se envió a SUNAT y no tiene valor tributario.'

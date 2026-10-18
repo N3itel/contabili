@@ -44,7 +44,8 @@ export interface EinvoiceInput {
 }
 
 export type EinvoiceProblem =
-  | 'einvoice_nrus'
+  | 'einvoice_nrus_test_only'
+  | 'nrus_no_factura'
   | 'factura_needs_ruc'
   | 'boleta_needs_id'
   | 'invalid_ruc'
@@ -53,8 +54,9 @@ export type EinvoiceProblem =
   | 'invalid_description';
 
 export const EINVOICE_PROBLEM_MESSAGES: Readonly<Record<EinvoiceProblem, string>> = {
-  einvoice_nrus:
-    'En el Nuevo RUS, la facturación electrónica llegará más adelante. Por ahora anota tus boletas a mano.',
+  einvoice_nrus_test_only:
+    'En el Nuevo RUS, la facturación electrónica por ahora es solo de prueba: todavía no mandamos tus boletas a SUNAT. Emite las reales como siempre y anótalas en Contabili.',
+  nrus_no_factura: 'En el Nuevo RUS solo emites boletas, no facturas.',
   factura_needs_ruc: 'Una factura va con el RUC de tu cliente. Si no tiene RUC, emite una boleta.',
   boleta_needs_id: 'Una boleta de más de S/ 700 lleva el nombre y el DNI (o RUC) de quien compra.',
   invalid_ruc: 'El RUC no es válido. Revisa los 11 dígitos.',
@@ -63,8 +65,20 @@ export const EINVOICE_PROBLEM_MESSAGES: Readonly<Record<EinvoiceProblem, string>
   invalid_description: 'Escribe qué vendiste (de 3 a 250 letras).',
 };
 
+/**
+ * En el Nuevo RUS, la beta emite solo en modo de prueba: falta confirmar
+ * cómo va el IGV en una boleta electrónica de ese régimen antes de mandarla
+ * a SUNAT.
+ */
+export function einvoiceProviderProblem(
+  provider: 'test' | 'nubefact',
+  regime: TaxRegime,
+): EinvoiceProblem | null {
+  return regime === 'nrus' && provider !== 'test' ? 'einvoice_nrus_test_only' : null;
+}
+
 export function einvoiceProblem(input: EinvoiceInput, regime: TaxRegime): EinvoiceProblem | null {
-  if (regime === 'nrus') return 'einvoice_nrus';
+  if (regime === 'nrus' && input.type === '01') return 'nrus_no_factura';
   const { docType, number, name } = input.customer;
   if (input.type === '01' && docType !== 'ruc') return 'factura_needs_ruc';
   if (input.type === '03' && docType === 'none' && input.total > BOLETA_ID_THRESHOLD) {
@@ -119,8 +133,15 @@ export function creditNoteProblem(
   return null;
 }
 
-/** Base e IGV del total, con la misma regla de todo Contabili (`tax/igv.ts`). */
-export function einvoiceAmounts(total: Cents): { base: Cents; igv: Cents; total: Cents } {
+/**
+ * Base e IGV del total, con la misma regla de todo Contabili (`tax/igv.ts`).
+ * En el Nuevo RUS el precio no separa el IGV: todo es el importe.
+ */
+export function einvoiceAmounts(
+  total: Cents,
+  regime: TaxRegime,
+): { base: Cents; igv: Cents; total: Cents } {
+  if (regime === 'nrus') return { base: total, igv: 0, total };
   const { base, igv } = igvFromTotal(total);
   return { base, igv, total };
 }

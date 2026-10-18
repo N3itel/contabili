@@ -29,6 +29,7 @@ import {
   einvoiceAmounts,
   einvoiceNumberLabel,
   einvoiceProblem,
+  einvoiceProviderProblem,
   type EinvoiceDocType,
   EINVOICE_TYPES,
   type EinvoiceType,
@@ -198,11 +199,12 @@ export class EinvoicingService {
       .select({ taxRegime: companies.taxRegime })
       .from(companies)
       .where(eq(companies.id, companyId));
-    if (company.taxRegime === 'nrus') {
+    const regimeProblem = einvoiceProviderProblem(input.provider, company.taxRegime);
+    if (regimeProblem) {
       throw apiError(
         HttpStatus.BAD_REQUEST,
-        'einvoice_nrus',
-        EINVOICE_PROBLEM_MESSAGES.einvoice_nrus,
+        regimeProblem,
+        EINVOICE_PROBLEM_MESSAGES[regimeProblem],
       );
     }
     const [current] = await this.db
@@ -341,9 +343,21 @@ export class EinvoicingService {
     const issueDate = limaDate(new Date());
     if (company.closedThrough && issueDate <= company.closedThrough) throw periodClosed('emitir');
 
-    const amounts = einvoiceAmounts(input.total);
+    const amounts = einvoiceAmounts(input.total, company.taxRegime);
     const reserved = await this.db.transaction(async (tx) => {
       const settings = await this.lockSettings(tx, companyId);
+      // Por si la empresa pasó al Nuevo RUS con Nubefact ya conectado.
+      const regimeProblem = einvoiceProviderProblem(
+        settings.provider as ProviderCode,
+        company.taxRegime,
+      );
+      if (regimeProblem) {
+        throw apiError(
+          HttpStatus.BAD_REQUEST,
+          regimeProblem,
+          EINVOICE_PROBLEM_MESSAGES[regimeProblem],
+        );
+      }
       const series = input.type === '01' ? settings.facturaSeries : settings.boletaSeries;
       const [row] = await tx
         .insert(einvoices)
@@ -364,6 +378,7 @@ export class EinvoicingService {
           baseCents: amounts.base,
           igvCents: amounts.igv,
           totalCents: amounts.total,
+          nrus: company.taxRegime === 'nrus',
           status: 'pending',
           createdBy: actorId,
         })
@@ -478,6 +493,7 @@ export class EinvoicingService {
             baseCents: original.baseCents,
             igvCents: original.igvCents,
             totalCents: original.totalCents,
+            nrus: original.nrus,
             status: 'pending',
             modifiesId: original.id,
             creditReason: reason,

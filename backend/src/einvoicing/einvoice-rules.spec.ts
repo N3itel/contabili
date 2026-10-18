@@ -3,6 +3,7 @@ import {
   creditNoteProblem,
   einvoiceAmounts,
   type EinvoiceInput,
+  einvoiceProviderProblem,
   einvoiceNumberLabel,
   einvoiceProblem,
   integerInWords,
@@ -63,7 +64,7 @@ describe('facturación electrónica: reglas', () => {
   });
 
   it('no en el Nuevo RUS (por ahora) y con descripción', () => {
-    expect(einvoiceProblem(boleta(), 'nrus')).toBe('einvoice_nrus');
+    expect(einvoiceProblem(boleta(), 'nrus')).toBeNull();
     expect(einvoiceProblem(boleta({ description: ' ab ' }), 'rmt')).toBe('invalid_description');
   });
 
@@ -76,7 +77,7 @@ describe('facturación electrónica: reglas', () => {
   });
 
   it('base e IGV con la regla de siempre', () => {
-    expect(einvoiceAmounts(11800)).toEqual({ base: 10000, igv: 1800, total: 11800 });
+    expect(einvoiceAmounts(11800, 'rmt')).toEqual({ base: 10000, igv: 1800, total: 11800 });
   });
 
   it('el monto en letras', () => {
@@ -110,5 +111,22 @@ describe('facturación electrónica: reglas', () => {
     // El error en el RUC es cosa de facturas.
     expect(creditNoteProblem(ok, '02')).toBe('credit_reason_ruc');
     expect(creditNoteProblem({ ...ok, docType: '01' }, '02')).toBeNull();
+  });
+
+  it('Nuevo RUS: solo boletas, solo de prueba y sin separar el IGV', () => {
+    expect(einvoiceProblem(boleta(), 'nrus')).toBeNull();
+    expect(
+      einvoiceProblem(
+        boleta({
+          type: '01',
+          customer: { docType: 'ruc', number: '20131312955', name: 'Comercial Andina SAC' },
+        }),
+        'nrus',
+      ),
+    ).toBe('nrus_no_factura');
+    expect(einvoiceProviderProblem('test', 'nrus')).toBeNull();
+    expect(einvoiceProviderProblem('nubefact', 'nrus')).toBe('einvoice_nrus_test_only');
+    expect(einvoiceProviderProblem('nubefact', 'rmt')).toBeNull();
+    expect(einvoiceAmounts(11800, 'nrus')).toEqual({ base: 11800, igv: 0, total: 11800 });
   });
 });

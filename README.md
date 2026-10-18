@@ -29,7 +29,8 @@ de prueba se compilan desde GitHub Actions.
     ventas y el de compras del mes, sin duplicados.
   - **Facturación electrónica (beta)**: boletas y facturas en modo de prueba o
     con la cuenta de Nubefact de cada empresa; la venta se anota sola, y se
-    anulan con nota de crédito, que la descuenta.
+    anulan con nota de crédito, que la descuenta. En el Nuevo RUS, boletas de
+    prueba por ahora.
   - **Avisos por SMS** a los dueños antes de que venza la prueba o el plan.
   - **Descargas en Excel y PDF**: libro diario, balance de comprobación y
     registros de ventas y compras, y el **reporte del mes** en PDF con la marca,
@@ -109,7 +110,8 @@ Sin `from`/`to`, los reportes van del 1 de enero hasta hoy (hora de Lima).
    firmados (MSIX, DMG notarizado, .deb, Play y App Store) y publicarlos en `/descargas`.
 5. ~~Avisos antes de que venza el plan.~~ Comprobante electrónico de cada pago de licencia.
 6. ~~Registro de ventas y de compras desde comprobantes; exportar a PDF.~~
-7. ~~Facturación electrónica (beta, con Nubefact) y notas de crédito.~~ Nuevo RUS y libros electrónicos PLE.
+7. ~~Facturación electrónica (beta, con Nubefact) y notas de crédito.~~ Nuevo RUS (hoy solo de
+   prueba) y libros electrónicos PLE.
 
 ## Desarrollo
 

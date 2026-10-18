@@ -34,6 +34,7 @@ class _EinvoicingScreenState extends State<EinvoicingScreen> {
   Company get _company => widget.session.company!;
   ContabiliApi get _api => widget.session.api;
   bool get _owner => _company.role == Role.owner;
+  bool get _nrus => _company.taxRegime == TaxRegime.nrus;
 
   @override
   void initState() {
@@ -175,6 +176,7 @@ class _EinvoicingScreenState extends State<EinvoicingScreen> {
                       else ...[
                         _StatusCard(
                           settings: settings,
+                          nrus: _nrus,
                           onEdit: _owner ? () => setState(() => _editing = true) : null,
                         ),
                         const SizedBox(height: 16),
@@ -182,7 +184,7 @@ class _EinvoicingScreenState extends State<EinvoicingScreen> {
                           FilledButton.icon(
                             onPressed: _emit,
                             icon: const Icon(Icons.receipt_long_outlined),
-                            label: const Text('Emitir boleta o factura'),
+                            label: Text(_nrus ? 'Emitir boleta' : 'Emitir boleta o factura'),
                           ),
                         const SizedBox(height: 24),
                         const SectionTitle('Emitidos este mes'),
@@ -226,9 +228,10 @@ class _EinvoicingScreenState extends State<EinvoicingScreen> {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.settings, this.onEdit});
+  const _StatusCard({required this.settings, required this.nrus, this.onEdit});
 
   final EinvoiceSettings settings;
+  final bool nrus;
   final VoidCallback? onEdit;
 
   @override
@@ -245,16 +248,20 @@ class _StatusCard extends StatelessWidget {
             style: ContabiliFonts.title(24, color: Colors.white),
           ),
           const SizedBox(height: 6),
-          Text(
-            settings.isTest
-                ? 'Lo que emitas aquí no se manda a SUNAT: sirve para ver cómo queda. Cuando tengas tu cuenta en Nubefact, conéctala.'
-                : 'Tus boletas y facturas se mandan a SUNAT por tu cuenta de Nubefact (${settings.endpointHost}).',
-            style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 16),
-          ),
+          Text(switch ((settings.isTest, nrus)) {
+            (true, true) =>
+              'Lo que emitas aquí no se manda a SUNAT: sirve para ver cómo queda. En el Nuevo RUS, por ahora la facturación electrónica es solo de prueba.',
+            (true, false) =>
+              'Lo que emitas aquí no se manda a SUNAT: sirve para ver cómo queda. Cuando tengas tu cuenta en Nubefact, conéctala.',
+            (false, _) =>
+              'Tus boletas y facturas se mandan a SUNAT por tu cuenta de Nubefact (${settings.endpointHost}).',
+          }, style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 16)),
           const SizedBox(height: 10),
           Text(
-            'Series: ${settings.boletaSeries} para boletas · ${settings.facturaSeries} para facturas · '
-            '${settings.boletaNoteSeries} y ${settings.facturaNoteSeries} para sus notas de crédito',
+            nrus
+                ? 'Series: ${settings.boletaSeries} para boletas · ${settings.boletaNoteSeries} para sus notas de crédito'
+                : 'Series: ${settings.boletaSeries} para boletas · ${settings.facturaSeries} para facturas · '
+                      '${settings.boletaNoteSeries} y ${settings.facturaNoteSeries} para sus notas de crédito',
             style: const TextStyle(color: ContabiliColors.goldLight, fontWeight: FontWeight.w600),
           ),
           if (onEdit != null) ...[
@@ -311,9 +318,10 @@ class _SettingsFormState extends State<_SettingsForm> {
       _error = null;
     });
     try {
+      final nrus = widget.session.company!.taxRegime == TaxRegime.nrus;
       final saved = await widget.session.api.saveEinvoiceSettings(
         widget.session.company!.id,
-        provider: _provider,
+        provider: nrus ? 'test' : _provider,
         facturaSeries: _factura.text.trim().toUpperCase(),
         boletaSeries: _boleta.text.trim().toUpperCase(),
         facturaNoteSeries: _facturaNote.text.trim().toUpperCase(),
@@ -337,73 +345,59 @@ class _SettingsFormState extends State<_SettingsForm> {
       FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
       LengthLimitingTextInputFormatter(4),
     ];
+    Widget field(TextEditingController controller, String label, String hint) => TextField(
+      controller: controller,
+      textCapitalization: TextCapitalization.characters,
+      inputFormatters: series,
+      decoration: InputDecoration(labelText: label, hintText: hint),
+    );
+    // En el Nuevo RUS: solo boletas y solo de prueba (las series de facturas quedan como están).
+    final nrus = widget.session.company!.taxRegime == TaxRegime.nrus;
+    final fields = [
+      field(_boleta, 'Serie de boletas', 'B001'),
+      if (!nrus) field(_factura, 'Serie de facturas', 'F001'),
+      field(_boletaNote, 'Notas de boletas', 'BC01'),
+      if (!nrus) field(_facturaNote, 'Notas de facturas', 'FC01'),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Notice(
-          text:
-              'Beta: emite boletas y facturas electrónicas desde Contabili. Empieza en modo de prueba; para mandarlas a SUNAT, conecta tu cuenta de Nubefact (un proveedor autorizado).',
+        Notice(
+          text: nrus
+              ? 'Beta: prueba cómo quedan tus boletas electrónicas. En el Nuevo RUS, por ahora es solo de prueba: no se mandan a SUNAT. Emite las reales como siempre y anótalas en Contabili.'
+              : 'Beta: emite boletas y facturas electrónicas desde Contabili. Empieza en modo de prueba; para mandarlas a SUNAT, conecta tu cuenta de Nubefact (un proveedor autorizado).',
         ),
         const SizedBox(height: 16),
-        ChoiceRow<String>(
-          label: '¿Cómo quieres emitir?',
-          value: _provider,
-          onChanged: (v) => setState(() => _provider = v),
-          options: const [
-            ('test', 'Modo de prueba', Icons.science_outlined),
-            ('nubefact', 'Mi cuenta de Nubefact', Icons.cloud_done_outlined),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _boleta,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: series,
-                decoration: const InputDecoration(labelText: 'Serie de boletas', hintText: 'B001'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _factura,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: series,
-                decoration: const InputDecoration(labelText: 'Serie de facturas', hintText: 'F001'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _boletaNote,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: series,
-                decoration: const InputDecoration(labelText: 'Notas de boletas', hintText: 'BC01'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _facturaNote,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: series,
-                decoration: const InputDecoration(labelText: 'Notas de facturas', hintText: 'FC01'),
-              ),
-            ),
-          ],
-        ),
+        if (!nrus) ...[
+          ChoiceRow<String>(
+            label: '¿Cómo quieres emitir?',
+            value: _provider,
+            onChanged: (v) => setState(() => _provider = v),
+            options: const [
+              ('test', 'Modo de prueba', Icons.science_outlined),
+              ('nubefact', 'Mi cuenta de Nubefact', Icons.cloud_done_outlined),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+        for (var i = 0; i < fields.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: fields[i]),
+              const SizedBox(width: 10),
+              Expanded(child: fields[i + 1]),
+            ],
+          ),
+        ],
         const SizedBox(height: 6),
         Text(
-          'Las notas de crédito anulan una boleta o factura. Si usas Nubefact, registra estas series también allá.',
+          nrus
+              ? 'Las notas de crédito anulan una boleta.'
+              : 'Las notas de crédito anulan una boleta o factura. Si usas Nubefact, registra estas series también allá.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        if (_provider == 'nubefact') ...[
+        if (_provider == 'nubefact' && !nrus) ...[
           const SizedBox(height: 12),
           TextField(
             controller: _endpoint,
@@ -707,6 +701,7 @@ class _EmitScreenState extends State<EmitScreen> {
   String? _error;
 
   Company get _company => widget.session.company!;
+  bool get _nrus => _company.taxRegime == TaxRegime.nrus;
 
   @override
   void dispose() {
@@ -861,7 +856,7 @@ class _EmitScreenState extends State<EmitScreen> {
   @override
   Widget build(BuildContext context) {
     final total = _total;
-    final split = total == null ? null : igvFromTotal(total);
+    final split = total == null || _nrus ? null : igvFromTotal(total);
     return Scaffold(
       appBar: AppBar(title: Text('Emitir ${_type.label.toLowerCase()}')),
       body: ListView(
@@ -872,19 +867,22 @@ class _EmitScreenState extends State<EmitScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SegmentedButton<EinvoiceType>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: EinvoiceType.boleta, label: Text('Boleta')),
-                    ButtonSegment(value: EinvoiceType.factura, label: Text('Factura')),
-                  ],
-                  selected: {_type},
-                  onSelectionChanged: (s) => setState(() {
-                    _type = s.first;
-                    if (_type == EinvoiceType.factura) _doc = CustomerDoc.ruc;
-                  }),
-                ),
-                const SizedBox(height: 18),
+                // En el Nuevo RUS solo hay boletas.
+                if (!_nrus) ...[
+                  SegmentedButton<EinvoiceType>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(value: EinvoiceType.boleta, label: Text('Boleta')),
+                      ButtonSegment(value: EinvoiceType.factura, label: Text('Factura')),
+                    ],
+                    selected: {_type},
+                    onSelectionChanged: (s) => setState(() {
+                      _type = s.first;
+                      if (_type == EinvoiceType.factura) _doc = CustomerDoc.ruc;
+                    }),
+                  ),
+                  const SizedBox(height: 18),
+                ],
                 TextField(
                   controller: _amount,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -902,6 +900,12 @@ class _EmitScreenState extends State<EmitScreen> {
                   const SizedBox(height: 8),
                   Text(
                     '${formatSoles(split.base)} es tu venta y ${formatSoles(split.igv)} es IGV.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ] else if (_nrus) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'En el Nuevo RUS el precio no separa el IGV: la boleta va por el total.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

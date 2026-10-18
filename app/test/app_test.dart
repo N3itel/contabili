@@ -502,6 +502,33 @@ void main() {
     expect(register.rows.last.modifies, 'Boleta B001-1');
   });
 
+  testWidgets('Nuevo RUS: boletas solo de prueba y sin separar el IGV', (tester) async {
+    _largeText(tester);
+    final api = FakeContabiliApi(signedIn: true, companies: [_company(regime: TaxRegime.nrus)]);
+    await _Harness(api).pump(tester);
+    await _tapText(tester, 'Más');
+    await _tapText(tester, 'Facturación electrónica (beta)');
+    expect(find.textContaining('En el Nuevo RUS, por ahora es solo de prueba'), findsOneWidget);
+    expect(find.text('¿Cómo quieres emitir?'), findsNothing);
+    expect(find.text('Serie de facturas'), findsNothing);
+    await _tapText(tester, 'Guardar');
+    expect(find.text('Modo de prueba'), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'Facturación en el Nuevo RUS');
+
+    await _tapText(tester, 'Emitir boleta');
+    expect(find.widgetWithText(SegmentedButton<EinvoiceType>, 'Factura'), findsNothing);
+    await tester.enterText(find.widgetWithText(TextField, 'Total, con IGV'), '118');
+    await tester.enterText(find.widgetWithText(TextField, '¿Qué vendiste?'), 'Abarrotes varios');
+    await tester.pump();
+    expect(
+      find.text('En el Nuevo RUS el precio no separa el IGV: la boleta va por el total.'),
+      findsOneWidget,
+    );
+    await _tapButton(tester, 'Emitir boleta');
+    expect(find.text('Boleta B001-00000001 por S/ 118.00'), findsOneWidget);
+    expect(api.documents.single.$4, 0);
+  });
+
   testWidgets('se ve que es beta', (tester) async {
     final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
     await _Harness(api).pump(tester);

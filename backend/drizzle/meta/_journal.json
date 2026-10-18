@@ -120,6 +120,13 @@
       "when": 1792290157377,
       "tag": "0016_notas_de_credito",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792291221564,
+      "tag": "0017_facturacion_nuevo_rus",
+      "breakpoints": true
     }
   ]
 }

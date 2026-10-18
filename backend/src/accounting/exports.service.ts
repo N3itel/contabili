@@ -274,6 +274,7 @@ export class ExportsService {
         igv: row.igvCents,
         total: row.totalCents,
         test: row.provider === 'test',
+        nrus: row.nrus,
         hash: row.hash,
       }),
     };

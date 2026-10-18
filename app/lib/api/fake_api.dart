@@ -393,6 +393,14 @@ class FakeContabiliApi implements ContabiliApi {
     String? token,
   }) async {
     _check();
+    final company = _companies.firstWhere((c) => c.id == companyId);
+    if (company.taxRegime == TaxRegime.nrus && provider != 'test') {
+      throw const ApiException(
+        status: 400,
+        code: 'einvoice_nrus_test_only',
+        message: 'En el Nuevo RUS, la facturación electrónica por ahora es solo de prueba.',
+      );
+    }
     return einvoicing = EinvoiceSettings(
       enabled: true,
       provider: provider,

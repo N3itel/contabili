@@ -1,0 +1,2 @@
+ALTER TABLE "einvoices" ADD COLUMN "nrus" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "einvoices" ADD CONSTRAINT "einvoices_nrus" CHECK (NOT "einvoices"."nrus" OR ("einvoices"."provider" = 'test' AND "einvoices"."doc_type" <> '01' AND "einvoices"."igv_cents" = 0));
