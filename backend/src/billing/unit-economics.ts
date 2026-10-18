@@ -17,6 +17,8 @@ export const COSTS = {
   smsCents: 95,
   /** Códigos por persona al mes: cada ingreso en un dispositivo y los reenvíos. */
   smsPerMemberPerMonth: 1,
+  /** Avisos de vencimiento por ciclo (3 días antes y al vencer), a un dueño. */
+  reminderSmsPerCycle: 2,
   /** Servidores, base de datos y respaldos repartidos por empresa. */
   infraPerCompanyCents: 200,
   /** Comprobante electrónico de cada pago (OSE/PSE). */
@@ -43,7 +45,8 @@ export function unitEconomics(plan: PlanCode, cycle: BillingCycle): UnitEconomic
   const months = cycle === 'monthly' ? 1 : 12;
   const price = priceFor(plan, cycle);
   const netRevenueCents = (price * 100) / (100 + COSTS.igvPercent) / months;
-  const perCharge = (culqiFee(price) + COSTS.receiptCents) / months;
+  const perCharge =
+    (culqiFee(price) + COSTS.receiptCents + COSTS.reminderSmsPerCycle * COSTS.smsCents) / months;
   const costCents =
     perCharge +
     PLANS[plan].maxMembers * COSTS.smsPerMemberPerMonth * COSTS.smsCents +

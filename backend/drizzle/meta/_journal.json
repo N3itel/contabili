@@ -92,6 +92,13 @@
       "when": 1792284812686,
       "tag": "0012_comprobantes_inmutables",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792286231138,
+      "tag": "0013_avisos_de_vencimiento",
+      "breakpoints": true
     }
   ]
 }

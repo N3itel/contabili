@@ -94,3 +94,28 @@ export const licenseOrders = pgTable(
     ),
   ],
 );
+
+/**
+ * Avisos por SMS de que vence (o venció) la prueba o el plan. Uno por empresa,
+ * tipo y fecha de vencimiento: aunque corran varias instancias, sale una vez.
+ */
+export const licenseReminders = pgTable(
+  'license_reminders',
+  {
+    id: id(),
+    companyId: uuid('company_id')
+      .notNull()
+      .references(() => companies.id),
+    /** `ending`: faltan pocos días; `ended`: ya venció. */
+    kind: varchar('kind', { length: 8 }).notNull(),
+    endsAt: ts('ends_at').notNull(),
+    /** A cuántos dueños se les mandó. */
+    recipients: smallint('recipients').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('license_reminders_once_uq').on(t.companyId, t.kind, t.endsAt),
+    check('license_reminders_kind', sql`${t.kind} IN ('ending', 'ended')`),
+    check('license_reminders_recipients', sql`${t.recipients} BETWEEN 0 AND 3`),
+  ],
+);

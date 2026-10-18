@@ -59,6 +59,7 @@ Guía para quien programe en este repositorio (personas o Claude).
 - Cobro como en Taxinka: el monto lo fija el servidor; la página `/pagar/<orden>#t=<código>` lleva el código en el fragmento; la tarjeta o Yape van al checkout de Culqi. La licencia se extiende solo cuando Culqi confirma el cargo (respuesta del cobro o webhook que consulta el cargo, nunca cree el cuerpo), una vez por orden (escritura condicional e índice único por cargo). Un pago empieza cuando termina lo que ya había (prueba o periodo pagado).
 - Una orden nueva reemplaza a las pendientes; con un cobro en curso no se crea otra. 4 intentos por orden (3DS no gasta), 10 órdenes por empresa al día, vencen a los 30 min.
 - Nunca registres el cuerpo de las respuestas de Culqi. Sin llaves se usa el proveedor de prueba; en producción, llaves `live`.
+- Avisos de vencimiento (`billing/reminder-rules.ts`, `RemindersService`, cada hora): SMS a los dueños (hasta 3) 3 días antes de que termine la prueba o el plan y otro al vencer (hasta 7 días después), solo de 9 a. m. a 8 p. m. de Lima. Una vez por empresa, tipo y fecha de vencimiento (índice único `license_reminders_once_uq`, reservado antes de mandar): pagar mueve la fecha y el ciclo vuelve a empezar. El texto va sin tildes (GSM-7, una sola parte de 160); el del código por SMS lleva tilde y por eso cabe en 70. Su costo está en `COSTS.reminderSmsPerCycle`.
 
 ## Sitio público
 

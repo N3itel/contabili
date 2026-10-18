@@ -33,16 +33,17 @@ Alegra. Cuando llegue la facturación electrónica, conviene revisar los precios
 | --- | --- |
 | IGV | 18 % del precio (se queda SUNAT) |
 | Culqi | 3,44 % + US$ 0,20 por cargo; mínimo S/ 3,50 si el cargo es menor a S/ 87,72 |
-| SMS (Twilio) | US$ 0,25 por código ≈ S/ 0,95; 1 por persona al mes, con el plan lleno |
+| SMS (Twilio) | US$ 0,25 por mensaje ≈ S/ 0,95; 1 código por persona al mes, con el plan lleno |
+| Avisos de vencimiento | 2 SMS por ciclo (3 días antes y al vencer) |
 | Servidores | S/ 2 por empresa |
 | Comprobante del pago | S/ 0,60 por cargo |
 
 | Plan y ciclo | Ingreso sin IGV | Costo | Margen |
 | --- | --- | --- | --- |
-| Emprendedor mensual | S/ 21,19 | S/ 8,00 | 62 % |
-| Emprendedor anual | S/ 17,66 | S/ 4,73 | 73 % |
-| Negocio mensual | S/ 41,53 | S/ 11,80 | 72 % |
-| Negocio anual | S/ 34,60 | S/ 9,22 | 73 % |
+| Emprendedor mensual | S/ 21,19 | S/ 9,90 | 53 % |
+| Emprendedor anual | S/ 17,66 | S/ 4,89 | 72 % |
+| Negocio mensual | S/ 41,53 | S/ 13,70 | 67 % |
+| Negocio anual | S/ 34,60 | S/ 9,38 | 73 % |
 
 El mínimo de Culqi (S/ 3,50) se come el 14 % de un pago mensual de Emprendedor;
 por eso el año trae 2 meses gratis: a la empresa le conviene y a nosotros también.
@@ -54,7 +55,7 @@ cubren con unas 40 empresas pagando Emprendedor.
 ## Para revisar
 
 - Confirmar con Culqi la tarifa y el mínimo (dicen que varían por volumen y se negocian).
-- El SMS es el costo variable más alto: si crece, considerar el código por WhatsApp.
+- El SMS es el costo variable más alto: si crece, considerar el código por WhatsApp. Cada SMS va en una sola parte: el código cabe en 70 caracteres (lleva tilde) y los avisos van sin tildes en 160.
 - Las fuentes de la competencia son de octubre de 2026; verificarlas antes de cada revisión.
 
 Fuentes: [Alegra Perú](https://www.alegra.com/peru/contabilidad/precios/),

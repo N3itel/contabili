@@ -83,7 +83,10 @@ export function canSendOtp(sentInLastDay: Date[], now: Date): SendDecision {
   return { allowed: true };
 }
 
-/** Texto del SMS. Corto (una sola parte) y con la advertencia de no compartirlo. */
+/**
+ * Texto del SMS, con la advertencia de no compartirlo. Lleva tilde, así que
+ * va en Unicode: hasta 70 caracteres para que sea una sola parte (y un solo cobro).
+ */
 export function otpMessage(code: string): string {
-  return `Contabili: tu código es ${code}. Vence en 5 minutos. No lo compartas con nadie.`;
+  return `Contabili: tu código es ${code}. Vence en 5 min. No lo compartas.`;
 }

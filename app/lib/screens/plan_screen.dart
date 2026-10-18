@@ -130,8 +130,24 @@ class _PlanScreenState extends State<PlanScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                if (owner && license.status != LicenseStatus.expired)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.sms_outlined, color: ContabiliColors.ink2, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Te avisamos por SMS 3 días antes de que venza.',
+                            style: TextStyle(color: ContabiliColors.ink2),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 const SectionTitle('Elige tu plan'),
                 SegmentedButton<BillingCycle>(
                   showSelectedIcon: false,
