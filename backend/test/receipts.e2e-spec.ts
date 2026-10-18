@@ -147,13 +147,11 @@ describe('comprobante de cada pago de licencia (e2e)', () => {
     await receipts.sweep();
     const pending = await receiptOf(orderId);
     expect(pending).toMatchObject({ status: 'pending', series: 'F001' });
-    const check = vi
-      .spyOn(provider, 'check')
-      .mockResolvedValueOnce({
-        status: 'accepted',
-        message: 'Aceptada',
-        pdfUrl: 'https://www.nubefact.com/cpe/f.pdf',
-      });
+    const check = vi.spyOn(provider, 'check').mockResolvedValueOnce({
+      status: 'accepted',
+      message: 'Aceptada',
+      pdfUrl: 'https://www.nubefact.com/cpe/f.pdf',
+    });
     await receipts.sweep(new Date(Date.now() + 2 * 60_000));
     expect(await receiptOf(orderId)).toMatchObject({
       status: 'accepted',
