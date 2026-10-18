@@ -61,7 +61,7 @@ class _RegistersScreenState extends State<RegistersScreen> {
     _load();
   }
 
-  Future<void> _export() async {
+  Future<void> _export(ExportFormat format) async {
     final (from, to) = periodBounds(_period);
     try {
       final link = await widget.session.api.exportLink(
@@ -69,12 +69,15 @@ class _RegistersScreenState extends State<RegistersScreen> {
         kind: _kind.export,
         from: from,
         to: to,
+        format: format,
       );
       final opened = await widget.session.openLink(link);
       setState(
-        () => _notice = opened
-            ? 'Abrimos la descarga en tu navegador. El archivo se abre con Excel.'
-            : 'No pudimos abrir el navegador. Inténtalo de nuevo.',
+        () => _notice = !opened
+            ? 'No pudimos abrir el navegador. Inténtalo de nuevo.'
+            : format == ExportFormat.pdf
+            ? 'Abrimos el PDF en tu navegador: puedes guardarlo, imprimirlo o mandarlo.'
+            : 'Abrimos la descarga en tu navegador. El archivo se abre con Excel.',
       );
     } on ApiException catch (error) {
       setState(() => _notice = error.message);
@@ -172,10 +175,24 @@ class _RegistersScreenState extends State<RegistersScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _export,
-                        icon: const Icon(Icons.download_outlined),
-                        label: const Text('Descargar para Excel'),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _export(ExportFormat.csv),
+                              icon: const Icon(Icons.table_chart_outlined),
+                              label: const Text('Excel'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _export(ExportFormat.pdf),
+                              icon: const Icon(Icons.picture_as_pdf_outlined),
+                              label: const Text('PDF'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],

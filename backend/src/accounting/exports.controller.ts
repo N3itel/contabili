@@ -3,12 +3,17 @@ import type { Response } from 'express';
 import { z } from 'zod';
 import { type AuthContext, CurrentAuth, Public } from '../auth/auth.guard.js';
 import { apiError, uuidParam, ZodPipe } from '../common/http.js';
-import { EXPORT_KINDS, ExportsService } from './exports.service.js';
+import { EXPORT_FORMATS, EXPORT_KINDS, ExportsService } from './exports.service.js';
 import { isValidDate } from './lima.js';
 
 const date = z.string().refine(isValidDate, 'Usa el formato AAAA-MM-DD');
 const linkBody = z
-  .object({ kind: z.enum(EXPORT_KINDS), from: date, to: date })
+  .object({
+    kind: z.enum(EXPORT_KINDS),
+    format: z.enum(EXPORT_FORMATS).optional(),
+    from: date,
+    to: date,
+  })
   .refine((b) => b.from <= b.to, 'La fecha inicial es posterior a la final');
 
 /** Pedir el enlace de descarga (con sesión). */
@@ -43,7 +48,7 @@ export class ExportDownloadController {
     res
       .status(200)
       .set({
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': file.contentType,
         'Content-Disposition': `attachment; filename="${file.filename}"`,
         'Cache-Control': 'no-store',
         'Referrer-Policy': 'no-referrer',

@@ -27,8 +27,9 @@ de prueba se compilan desde GitHub Actions.
   - **Comprobantes y registros**: cada venta o gasto puede llevar su boleta,
     factura, recibo por honorarios o ticket; con ellos salen el registro de
     ventas y el de compras del mes, sin duplicados.
-  - **Descargas para Excel**: libro diario, balance de comprobación y registros
-    de ventas y compras en CSV, con enlaces firmados que vencen en 5 minutos.
+  - **Descargas en Excel y PDF**: libro diario, balance de comprobación y
+    registros de ventas y compras, y el **reporte del mes** en PDF con la marca,
+    con enlaces firmados que vencen en 5 minutos.
   - Plan de cuentas PCGE, libro diario inmutable (se corrige con extornos),
     libro mayor, balance de comprobación y **cierre mensual**.
   - **Licencias**: 30 días gratis por empresa; luego plan Emprendedor o
@@ -73,7 +74,7 @@ descargas con enlace firmado (`/exports/:token`). Los montos van en céntimos (S
 | `GET /companies/:id/trend?months=N` | consulta | Ventas y gastos de los últimos meses |
 | `GET /companies/:id/registers/sales` · `/purchases?period=AAAA-MM` | consulta | Registro de ventas o de compras con sus comprobantes |
 | `GET` · `POST /companies/:id/contacts`, `GET` · `PATCH …/:contactId` | consulta · contador | Clientes y proveedores, con lo que deben |
-| `POST /companies/:id/exports` | consulta | Enlace para descargar el diario o el balance en CSV (5 min) |
+| `POST /companies/:id/exports` | consulta | Enlace de descarga (5 min): diario, balance, registros o reporte del mes, en `csv` o `pdf` |
 | `POST /companies/:id/journal` | contador | Registrar un asiento |
 | `GET /companies/:id/journal?period=AAAA-MM&after=N` | consulta | Diario del mes, de a 100 |
 | `GET /companies/:id/journal/:entryId` | consulta | Un asiento |
@@ -99,7 +100,7 @@ Sin `from`/`to`, los reportes van del 1 de enero hasta hoy (hora de Lima).
 4. ~~App Flutter para Android, iOS, Windows, macOS y Linux.~~ Falta: instaladores
    firmados (MSIX, DMG notarizado, .deb, Play y App Store) y publicarlos en `/descargas`.
 5. Avisos antes de que venza el plan; comprobante electrónico de cada pago de licencia.
-6. ~~Registro de ventas y de compras desde comprobantes.~~ Exportar a PDF.
+6. ~~Registro de ventas y de compras desde comprobantes; exportar a PDF.~~
 7. Facturación electrónica (OSE/PSE) y libros electrónicos PLE.
 
 ## Desarrollo

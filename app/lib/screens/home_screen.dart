@@ -86,6 +86,33 @@ class _HomeScreenState extends State<HomeScreen> {
     if (saved == true) widget.changes.value++;
   }
 
+  /// El reporte del mes en PDF, para guardarlo, imprimirlo o mandarlo al contador.
+  Future<void> _downloadReport(String period) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final (from, to) = periodBounds(period);
+    try {
+      final link = await widget.session.api.exportLink(
+        _company.id,
+        kind: ExportKind.monthlyReport,
+        from: from,
+        to: to,
+        format: ExportFormat.pdf,
+      );
+      final opened = await widget.session.openLink(link);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            opened
+                ? 'Abrimos el reporte en tu navegador.'
+                : 'No pudimos abrir el navegador. Inténtalo de nuevo.',
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
   Future<void> _openTaxes() => Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => TaxesScreen(session: widget.session, changes: widget.changes),
@@ -134,7 +161,13 @@ class _HomeScreenState extends State<HomeScreen> {
             child: TrendChart(points: _trend),
           ),
         ),
+        const SizedBox(height: 16),
       ],
+      OutlinedButton.icon(
+        onPressed: () => _downloadReport(summary.period),
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        label: Text('Reporte de ${monthName(summary.period)} en PDF'),
+      ),
     ];
 
     return RefreshIndicator(
@@ -171,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  if (hasTrend) const SizedBox(height: 28),
+                  const SizedBox(height: 28),
                   ...trend,
                 ]
               : [
@@ -181,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ...record,
                   if (record.isNotEmpty) const SizedBox(height: 28),
                   ...figures,
-                  if (hasTrend) const SizedBox(height: 28),
+                  const SizedBox(height: 28),
                   ...trend,
                 ];
           return ListView(

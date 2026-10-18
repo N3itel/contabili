@@ -8,6 +8,10 @@
       {
         "include": "web/assets/**/*",
         "watchAssets": true
+      },
+      {
+        "include": "pdf/fonts/**/*",
+        "watchAssets": true
       }
     ]
   }

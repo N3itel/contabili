@@ -9,7 +9,8 @@ import type { Env } from '../config/env.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
 import { accounts, companies, contacts, journalEntries, journalLines } from '../db/schema/index.js';
 import { CSV_BOM, csvAmount, csvRow, csvText } from './csv.js';
-import { formatDate } from './lima.js';
+import { formatDate, limaDate } from './lima.js';
+import { journalPdf, monthlyReportPdf, registerPdf, trialBalancePdf } from '../pdf/reports.js';
 import { RegistersService } from './registers.service.js';
 import { ReportsService } from './reports.service.js';
 
@@ -18,8 +19,16 @@ export const EXPORT_KINDS = [
   'trial_balance',
   'sales_register',
   'purchase_register',
+  'monthly_report',
 ] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
+export const EXPORT_FORMATS = ['csv', 'pdf'] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/** El reporte del mes es solo PDF: es para leerlo, no para sacar cuentas en Excel. */
+const PDF_ONLY: ReadonlySet<ExportKind> = new Set(['monthly_report']);
+/** En PDF, el diario va hasta este tope de líneas (un PDF de miles de páginas no sirve). */
+export const EXPORT_PDF_MAX_LINES = 5000;
 
 /** El enlace de descarga vale 5 minutos. */
 export const EXPORT_TTL_SECONDS = 5 * 60;
@@ -32,8 +41,15 @@ interface ExportClaims {
   userId: string;
   companyId: string;
   kind: ExportKind;
+  format: ExportFormat;
   from: string;
   to: string;
+}
+
+export interface ExportFile {
+  filename: string;
+  contentType: string;
+  body: string | Buffer;
 }
 
 const linkExpired = () =>
@@ -67,10 +83,23 @@ export class ExportsService {
   async createLink(
     companyId: string,
     actorId: string,
-    input: { kind: ExportKind; from: string; to: string },
+    input: { kind: ExportKind; format?: ExportFormat; from: string; to: string },
   ): Promise<{ url: string; expiresAt: string }> {
     await this.access.require(companyId, actorId, 'viewer');
-    const token = await new SignJWT({ cid: companyId, k: input.kind, f: input.from, t: input.to })
+    const format = input.format ?? (PDF_ONLY.has(input.kind) ? 'pdf' : 'csv');
+    if (PDF_ONLY.has(input.kind) && format !== 'pdf') {
+      throw apiError(HttpStatus.BAD_REQUEST, 'pdf_only', 'El reporte del mes solo está en PDF.');
+    }
+    if (input.kind === 'monthly_report' && input.from.slice(0, 7) !== input.to.slice(0, 7)) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'one_month', 'El reporte es de un solo mes.');
+    }
+    const token = await new SignJWT({
+      cid: companyId,
+      k: input.kind,
+      fm: format,
+      f: input.from,
+      t: input.to,
+    })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(actorId)
       .setAudience(AUDIENCE)
@@ -83,33 +112,81 @@ export class ExportsService {
     };
   }
 
-  /** Archivo del enlace: nombre y contenido CSV. */
-  async download(token: string): Promise<{ filename: string; body: string }> {
+  /** Archivo del enlace: nombre, tipo y contenido (CSV o PDF). */
+  async download(token: string): Promise<ExportFile> {
     const claims = await this.verify(token);
     // Sacar a alguien de la empresa corta también sus enlaces aún vigentes.
     await this.access.require(claims.companyId, claims.userId, 'viewer');
     const [company] = await this.db
-      .select({ ruc: companies.ruc })
+      .select({ ruc: companies.ruc, legalName: companies.legalName })
       .from(companies)
       .where(eq(companies.id, claims.companyId));
-    const range = `${claims.from}-al-${claims.to}`;
-    if (claims.kind === 'trial_balance') {
-      return {
-        filename: `balance-de-comprobacion-${company.ruc}-${range}.csv`,
-        body: await this.trialBalanceCsv(claims),
-      };
+    const range =
+      claims.kind === 'monthly_report' ? claims.from.slice(0, 7) : `${claims.from}-al-${claims.to}`;
+    const name = {
+      journal: 'libro-diario',
+      trial_balance: 'balance-de-comprobacion',
+      sales_register: 'registro-de-ventas',
+      purchase_register: 'registro-de-compras',
+      monthly_report: 'reporte-del-mes',
+    }[claims.kind];
+    const filename = `${name}-${company.ruc}-${range}.${claims.format}`;
+    if (claims.format === 'pdf') {
+      return { filename, contentType: 'application/pdf', body: await this.pdf(claims, company) };
     }
-    if (claims.kind === 'sales_register' || claims.kind === 'purchase_register') {
-      const sales = claims.kind === 'sales_register';
-      return {
-        filename: `registro-de-${sales ? 'ventas' : 'compras'}-${company.ruc}-${range}.csv`,
-        body: await this.registerCsv(claims, sales ? 'sale' : 'purchase'),
-      };
+    const body =
+      claims.kind === 'trial_balance'
+        ? await this.trialBalanceCsv(claims)
+        : claims.kind === 'sales_register' || claims.kind === 'purchase_register'
+          ? await this.registerCsv(claims, claims.kind === 'sales_register' ? 'sale' : 'purchase')
+          : await this.journalCsv(claims);
+    return { filename, contentType: 'text/csv; charset=utf-8', body };
+  }
+
+  private async pdf(
+    claims: ExportClaims,
+    company: { ruc: string; legalName: string },
+  ): Promise<Buffer> {
+    const { companyId, userId, from, to } = claims;
+    switch (claims.kind) {
+      case 'monthly_report': {
+        const period = from.slice(0, 7);
+        const [summary, taxes, sales, purchases] = await Promise.all([
+          this.reports.summary(companyId, userId, period, limaDate(new Date())),
+          this.reports.taxes(companyId, userId, period),
+          this.registers.register(companyId, userId, 'sale', from, to),
+          this.registers.register(companyId, userId, 'purchase', from, to),
+        ]);
+        return monthlyReportPdf({ company, period, summary, taxes, sales, purchases });
+      }
+      case 'sales_register':
+      case 'purchase_register':
+        return registerPdf(
+          company,
+          await this.registers.register(
+            companyId,
+            userId,
+            claims.kind === 'sales_register' ? 'sale' : 'purchase',
+            from,
+            to,
+          ),
+        );
+      case 'trial_balance':
+        return trialBalancePdf(
+          company,
+          await this.reports.trialBalance(companyId, userId, from, to),
+        );
+      case 'journal': {
+        const lines = await this.journalLines(claims, EXPORT_PDF_MAX_LINES + 1);
+        return journalPdf(
+          company,
+          from,
+          to,
+          lines.slice(0, EXPORT_PDF_MAX_LINES),
+          lines.length > EXPORT_PDF_MAX_LINES,
+        );
+      }
     }
-    return {
-      filename: `libro-diario-${company.ruc}-${range}.csv`,
-      body: await this.journalCsv(claims),
-    };
   }
 
   private async verify(token: string): Promise<ExportClaims> {
@@ -118,24 +195,32 @@ export class ExportsService {
         audience: AUDIENCE,
         algorithms: ['HS256'],
       });
-      const { sub, cid, k, f, t } = payload as Record<string, unknown>;
+      const { sub, cid, k, fm, f, t } = payload as Record<string, unknown>;
       if (
         typeof sub !== 'string' ||
         typeof cid !== 'string' ||
         !EXPORT_KINDS.includes(k as ExportKind) ||
+        !EXPORT_FORMATS.includes(fm as ExportFormat) ||
         typeof f !== 'string' ||
         typeof t !== 'string'
       ) {
         throw linkExpired();
       }
-      return { userId: sub, companyId: cid, kind: k as ExportKind, from: f, to: t };
+      return {
+        userId: sub,
+        companyId: cid,
+        kind: k as ExportKind,
+        format: fm as ExportFormat,
+        from: f,
+        to: t,
+      };
     } catch {
       throw linkExpired();
     }
   }
 
-  private async journalCsv(claims: ExportClaims): Promise<string> {
-    const rows = await this.db
+  private journalLines(claims: ExportClaims, limit: number) {
+    return this.db
       .select({
         number: journalEntries.number,
         fiscalYear: journalEntries.fiscalYear,
@@ -158,7 +243,11 @@ export class ExportsService {
         ),
       )
       .orderBy(asc(journalEntries.fiscalYear), asc(journalEntries.number), asc(journalLines.lineNo))
-      .limit(EXPORT_MAX_LINES);
+      .limit(limit);
+  }
+
+  private async journalCsv(claims: ExportClaims): Promise<string> {
+    const rows = await this.journalLines(claims, EXPORT_MAX_LINES);
     let csv = CSV_BOM;
     csv += csvRow([
       'Asiento',

@@ -1,4 +1,4 @@
-import { formatDate, isValidDate, limaDate, periodOf, periodRange } from './lima.js';
+import { formatDate, isValidDate, limaDate, periodLabel, periodOf, periodRange } from './lima.js';
 
 describe('fecha de Lima', () => {
   it('usa UTC−5', () => {
@@ -33,5 +33,10 @@ describe('fechas contables', () => {
 describe('fechas para mostrar', () => {
   it('usa día/mes/año', () => {
     expect(formatDate('2026-03-31')).toBe('31/03/2026');
+  });
+
+  it('nombra el mes en español', () => {
+    expect(periodLabel('2026-10')).toBe('octubre de 2026');
+    expect(periodLabel('2027-01')).toBe('enero de 2027');
   });
 });

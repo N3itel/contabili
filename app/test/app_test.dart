@@ -291,24 +291,33 @@ void main() {
     expect(find.text('¡Listo, quedó anotado!'), findsOneWidget);
   });
 
-  testWidgets('descarga los movimientos del mes para Excel', (tester) async {
+  testWidgets('descarga movimientos, balance y el reporte del mes, en Excel o PDF', (tester) async {
     final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
     final h = _Harness(api);
     await h.pump(tester);
     await _tapText(tester, 'Movimientos');
-    await _tapText(tester, 'Descargar para Excel');
-    await _tapText(tester, 'Movimientos de ${periodLabel(api.period)}');
+    await _tapText(tester, 'Descargar reportes');
+    await tester.tap(find.text('Excel').first);
+    await tester.pumpAndSettle();
     final (from, to) = periodBounds(api.period);
-    expect(api.exports.single, (ExportKind.journal, from, to));
+    expect(api.exports.single, (ExportKind.journal, from, to, ExportFormat.csv));
     expect(h.opened.single.path, '/api/v1/exports/enlace-de-prueba');
     expect(find.textContaining('se abre con Excel'), findsOneWidget);
 
-    await _tapText(tester, 'Descargar para Excel');
-    await _tapText(
-      tester,
-      'Balance de ${api.period.substring(0, 4)} hasta ${monthName(api.period)}',
-    );
-    expect(api.exports.last, (ExportKind.trialBalance, '${api.period.substring(0, 4)}-01-01', to));
+    await _tapText(tester, 'Descargar reportes');
+    await tester.tap(find.text('PDF').last);
+    await tester.pumpAndSettle();
+    expect(api.exports.last, (
+      ExportKind.trialBalance,
+      '${api.period.substring(0, 4)}-01-01',
+      to,
+      ExportFormat.pdf,
+    ));
+    expect(find.textContaining('Abrimos el PDF'), findsOneWidget);
+
+    await _tapText(tester, 'Descargar reportes');
+    await _tapText(tester, 'Reporte de ${periodLabel(api.period)}');
+    expect(api.exports.last, (ExportKind.monthlyReport, from, to, ExportFormat.pdf));
   });
 
   testWidgets('venta con boleta: entra al registro de ventas y se descarga', (tester) async {
@@ -331,9 +340,11 @@ void main() {
     expect(find.text('Boleta B001-45'), findsOneWidget);
     expect(find.text('Total vendido con comprobante'), findsOneWidget);
     expect(find.text('IGV S/ 18.00'), findsOneWidget);
-    await _tapText(tester, 'Descargar para Excel');
+    await _tapText(tester, 'Excel');
     final (from, to) = periodBounds(api.period);
-    expect(api.exports.single, (ExportKind.salesRegister, from, to));
+    expect(api.exports.single, (ExportKind.salesRegister, from, to, ExportFormat.csv));
+    await _tapText(tester, 'PDF');
+    expect(api.exports.last, (ExportKind.salesRegister, from, to, ExportFormat.pdf));
 
     await _tapText(tester, 'Compras');
     expect(find.text('Este mes no hay comprobantes de compra'), findsOneWidget);
@@ -376,6 +387,17 @@ void main() {
     await _tapText(tester, 'Vendí');
     expect(find.text('Boleta'), findsOneWidget);
     expect(find.text('Factura'), findsNothing);
+  });
+
+  testWidgets('el reporte del mes en PDF, desde Inicio', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    final h = _Harness(api);
+    await h.pump(tester);
+    await _tapText(tester, 'Reporte de ${monthName(api.period)} en PDF');
+    final (from, to) = periodBounds(api.period);
+    expect(api.exports.single, (ExportKind.monthlyReport, from, to, ExportFormat.pdf));
+    expect(h.opened, hasLength(1));
+    expect(find.text('Abrimos el reporte en tu navegador.'), findsOneWidget);
   });
 
   testWidgets('se ve que es beta', (tester) async {

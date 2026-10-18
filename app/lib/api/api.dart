@@ -62,6 +62,7 @@ abstract interface class ContabiliApi {
     required ExportKind kind,
     required String from,
     required String to,
+    ExportFormat format = ExportFormat.csv,
   });
 
   /// Crea la orden de pago y devuelve la dirección de la página de pago.

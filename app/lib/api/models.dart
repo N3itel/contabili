@@ -552,9 +552,20 @@ enum ExportKind {
   journal('journal', 'Libro diario'),
   trialBalance('trial_balance', 'Balance de comprobación'),
   salesRegister('sales_register', 'Registro de ventas'),
-  purchaseRegister('purchase_register', 'Registro de compras');
+  purchaseRegister('purchase_register', 'Registro de compras'),
+  monthlyReport('monthly_report', 'Reporte del mes');
 
   const ExportKind(this.wire, this.label);
+  final String wire;
+  final String label;
+}
+
+/// Formato de una descarga: Excel (CSV) o PDF.
+enum ExportFormat {
+  csv('csv', 'Excel'),
+  pdf('pdf', 'PDF');
+
+  const ExportFormat(this.wire, this.label);
   final String wire;
   final String label;
 }

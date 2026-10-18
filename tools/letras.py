@@ -13,6 +13,7 @@ latín-1, más puntuación y símbolos) y genera:
 
 - app/assets/fonts/: archivos fijos por peso (TTF), los que Flutter registra.
 - backend/src/web/assets/: WOFF2 variables para el sitio.
+- backend/src/pdf/fonts/: los mismos TTF fijos, para los reportes en PDF.
 
 Uso, desde la raíz: python3 tools/letras.py  (requiere fonttools y brotli).
 """
@@ -30,6 +31,8 @@ from fontTools.varLib import instancer
 ROOT = Path(__file__).resolve().parent.parent
 APP_FONTS = ROOT / "app/assets/fonts"
 WEB_ASSETS = ROOT / "backend/src/web/assets"
+PDF_FONTS = ROOT / "backend/src/pdf/fonts"
+PDF_STYLES = ["Saira-Bold", "Saira-ExtraBold", "Lexend-Regular", "Lexend-SemiBold"]
 SOURCE = "https://raw.githubusercontent.com/google/fonts/main/ofl"
 
 SAIRA = f"{SOURCE}/saira/Saira%5Bwdth,wght%5D.ttf"
@@ -61,8 +64,10 @@ def _download(url: str) -> bytes:
 def _subset(font: TTFont, flavor: str | None = None) -> bytes:
     # Se guarda y se vuelve a abrir: el recorte falla sobre una fuente recién instanciada.
     buffer = io.BytesIO()
+    font.recalcTimestamp = False
     font.save(buffer)
-    font = TTFont(io.BytesIO(buffer.getvalue()))
+    # Sin fecha nueva en cada corrida: los archivos solo cambian si cambia la letra.
+    font = TTFont(io.BytesIO(buffer.getvalue()), recalcTimestamp=False)
     options = subset.Options()
     options.layout_features = FEATURES
     options.name_IDs = ["*"]
@@ -83,7 +88,7 @@ def main() -> None:
 
     for family, weights in APP_WEIGHTS.items():
         for style, weight in weights.items():
-            font = TTFont(io.BytesIO(sources[family]))
+            font = TTFont(io.BytesIO(sources[family]), recalcTimestamp=False)
             axes = {"wght": weight}
             if family == "Saira":
                 axes["wdth"] = SAIRA_WIDTH
@@ -91,19 +96,23 @@ def main() -> None:
             (APP_FONTS / f"{family}-{style}.ttf").write_bytes(_subset(static))
 
     saira = instancer.instantiateVariableFont(
-        TTFont(io.BytesIO(sources["Saira"])), {"wdth": SAIRA_WIDTH, "wght": (500, 900)}
+        TTFont(io.BytesIO(sources["Saira"]), recalcTimestamp=False), {"wdth": SAIRA_WIDTH, "wght": (500, 900)}
     )
     (WEB_ASSETS / "saira.woff2").write_bytes(_subset(saira, "woff2"))
     lexend = instancer.instantiateVariableFont(
-        TTFont(io.BytesIO(sources["Lexend"])), {"wght": (300, 700)}
+        TTFont(io.BytesIO(sources["Lexend"]), recalcTimestamp=False), {"wght": (300, 700)}
     )
     (WEB_ASSETS / "lexend.woff2").write_bytes(_subset(lexend, "woff2"))
 
+    PDF_FONTS.mkdir(parents=True, exist_ok=True)
+    for style in PDF_STYLES:
+        (PDF_FONTS / f"{style}.ttf").write_bytes((APP_FONTS / f"{style}.ttf").read_bytes())
+
     for name, url in LICENSES.items():
         text = _download(url)
-        (APP_FONTS / name).write_bytes(text)
-        (WEB_ASSETS / name).write_bytes(text)
-    print("Letras generadas en app/assets/fonts y backend/src/web/assets.")
+        for folder in (APP_FONTS, WEB_ASSETS, PDF_FONTS):
+            (folder / name).write_bytes(text)
+    print("Letras generadas en app/assets/fonts, backend/src/web/assets y backend/src/pdf/fonts.")
 
 
 if __name__ == "__main__":

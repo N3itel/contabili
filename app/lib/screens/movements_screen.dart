@@ -112,20 +112,30 @@ class _MovementsScreenState extends State<MovementsScreen> {
   }
 
   Future<void> _export() async {
-    final kind = await showModalBottomSheet<ExportKind>(
+    final choice = await showModalBottomSheet<(ExportKind, ExportFormat)>(
       context: context,
+      isScrollControlled: true,
       builder: (context) => _ExportSheet(period: _period),
     );
-    if (kind == null || !mounted) return;
+    if (choice == null || !mounted) return;
+    final (kind, format) = choice;
     final (monthStart, monthEnd) = periodBounds(_period);
-    final from = kind == ExportKind.journal ? monthStart : '${_period.substring(0, 4)}-01-01';
+    final from = kind == ExportKind.trialBalance ? '${_period.substring(0, 4)}-01-01' : monthStart;
     try {
-      final link = await _api.exportLink(_company.id, kind: kind, from: from, to: monthEnd);
+      final link = await _api.exportLink(
+        _company.id,
+        kind: kind,
+        from: from,
+        to: monthEnd,
+        format: format,
+      );
       final opened = await widget.session.openLink(link);
       setState(
-        () => _notice = opened
-            ? 'Abrimos la descarga en tu navegador. El archivo se abre con Excel.'
-            : 'No pudimos abrir el navegador. Inténtalo de nuevo.',
+        () => _notice = !opened
+            ? 'No pudimos abrir el navegador. Inténtalo de nuevo.'
+            : format == ExportFormat.pdf
+            ? 'Abrimos el PDF en tu navegador: puedes guardarlo, imprimirlo o mandarlo.'
+            : 'Abrimos la descarga en tu navegador. El archivo se abre con Excel.',
       );
     } on ApiException catch (error) {
       setState(() => _notice = error.message);
@@ -308,7 +318,7 @@ class _MovementsScreenState extends State<MovementsScreen> {
                 OutlinedButton.icon(
                   onPressed: _export,
                   icon: const Icon(Icons.download_outlined),
-                  label: const Text('Descargar para Excel'),
+                  label: const Text('Descargar reportes'),
                 ),
                 if (_canClose) ...[
                   const SizedBox(height: 10),
@@ -328,6 +338,8 @@ class _MovementsScreenState extends State<MovementsScreen> {
 }
 
 /// Qué descargar: lo del mes o el balance del año hasta ese mes.
+/// Qué descargar: el reporte del mes (PDF), lo del mes o el balance del año,
+/// en Excel o en PDF.
 class _ExportSheet extends StatelessWidget {
   const _ExportSheet({required this.period});
 
@@ -336,30 +348,65 @@ class _ExportSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final year = period.substring(0, 4);
+    Widget formats(ExportKind kind) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          for (final (i, format) in ExportFormat.values.indexed) ...[
+            if (i > 0) const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                onPressed: () => Navigator.of(context).pop((kind, format)),
+                icon: Icon(
+                  format == ExportFormat.pdf
+                      ? Icons.picture_as_pdf_outlined
+                      : Icons.table_chart_outlined,
+                  size: 20,
+                ),
+                label: Text(format.label),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text('Descargar para Excel', style: Theme.of(context).textTheme.titleLarge),
+              child: Text('Descargar reportes', style: Theme.of(context).textTheme.titleLarge),
             ),
             const SizedBox(height: 8),
+            ListTile(
+              leading: const IconBox(
+                icon: Icons.picture_as_pdf_outlined,
+                color: ContabiliColors.terracotta,
+                background: ContabiliColors.terracottaSoft,
+                size: 42,
+              ),
+              title: Text('Reporte de ${periodLabel(period)}'),
+              subtitle: const Text('Cómo te fue, tu plata e impuestos, en PDF.'),
+              onTap: () => Navigator.of(context).pop((ExportKind.monthlyReport, ExportFormat.pdf)),
+            ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.receipt_long_outlined),
               title: Text('Movimientos de ${periodLabel(period)}'),
               subtitle: const Text('El libro diario: cada movimiento con su asiento.'),
-              onTap: () => Navigator.of(context).pop(ExportKind.journal),
             ),
+            formats(ExportKind.journal),
             ListTile(
               leading: const Icon(Icons.balance_outlined),
               title: Text('Balance de $year hasta ${monthName(period)}'),
               subtitle: const Text('El balance de comprobación, para tu contador.'),
-              onTap: () => Navigator.of(context).pop(ExportKind.trialBalance),
             ),
+            formats(ExportKind.trialBalance),
           ],
         ),
       ),

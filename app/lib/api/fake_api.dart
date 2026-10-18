@@ -480,7 +480,7 @@ class FakeContabiliApi implements ContabiliApi {
 
   final List<(String, Role)> invited = [];
   final List<Contact> _contacts = [];
-  final List<(ExportKind, String, String)> exports = [];
+  final List<(ExportKind, String, String, ExportFormat)> exports = [];
 
   @override
   Future<List<Contact>> contacts(String companyId, {ContactKind? kind}) async => [
@@ -569,9 +569,10 @@ class FakeContabiliApi implements ContabiliApi {
     required ExportKind kind,
     required String from,
     required String to,
+    ExportFormat format = ExportFormat.csv,
   }) async {
     _check();
-    exports.add((kind, from, to));
+    exports.add((kind, from, to, format));
     return Uri.parse('https://contabili.pe/api/v1/exports/enlace-de-prueba');
   }
 

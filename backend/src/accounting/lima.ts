@@ -39,3 +39,23 @@ export function formatDate(date: string): string {
   const [y, m, d] = date.split('-');
   return `${d}/${m}/${y}`;
 }
+
+const MONTHS = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+/** '2026-10' → 'octubre de 2026' (como en la app). */
+export function periodLabel(period: string): string {
+  return `${MONTHS[Number(period.slice(5, 7)) - 1]} de ${period.slice(0, 4)}`;
+}

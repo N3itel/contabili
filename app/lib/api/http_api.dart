@@ -230,11 +230,12 @@ class HttpContabiliApi implements ContabiliApi {
     required ExportKind kind,
     required String from,
     required String to,
+    ExportFormat format = ExportFormat.csv,
   }) async {
     final json = await _json(
       'POST',
       '${_company(companyId)}/exports',
-      body: {'kind': kind.wire, 'from': from, 'to': to},
+      body: {'kind': kind.wire, 'format': format.wire, 'from': from, 'to': to},
     );
     return Uri.parse(json['url'] as String);
   }
