@@ -32,13 +32,19 @@ describe('sitio público (e2e)', () => {
     },
   );
 
-  it('sirve su propia letra, sin recursos de terceros', async () => {
-    const res = await t.web.get('/fonts/figtree.ttf').expect(200);
-    expect(res.headers['content-type']).toBe('font/ttf');
-    expect(res.headers['cache-control']).toContain('immutable');
-    // El archivo tal cual (un TTF empieza con 00 01 00 00), no convertido a JSON.
-    expect(Number(res.headers['content-length'])).toBe(62712);
-    expect((res.body as Buffer).subarray(0, 4)).toEqual(Buffer.from([0, 1, 0, 0]));
+  it('sirve sus propias letras, sin recursos de terceros', async () => {
+    for (const file of ['saira.woff2', 'lexend.woff2']) {
+      const res = await t.web.get(`/fonts/${file}`).expect(200);
+      expect(res.headers['content-type']).toBe('font/woff2');
+      expect(res.headers['cache-control']).toContain('immutable');
+      // El archivo tal cual (un WOFF2 empieza con «wOF2»), no convertido a JSON.
+      expect((res.body as Buffer).subarray(0, 4).toString('latin1')).toBe('wOF2');
+      expect(Number(res.headers['content-length'])).toBe((res.body as Buffer).length);
+    }
+    await t.web.get('/fonts/otra.woff2').expect(404);
+    await t.web.get('/fonts/constructor').expect(404);
+    const home = await t.web.get('/').expect(200);
+    expect(home.text).toContain('/fonts/saira.woff2');
   });
 
   it('los precios salen de los planes', async () => {

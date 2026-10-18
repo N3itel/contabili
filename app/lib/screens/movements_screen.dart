@@ -183,6 +183,27 @@ class _MovementsScreenState extends State<MovementsScreen> {
     }
   }
 
+  /// Agrupa por fecha, en el orden en que vienen (del más nuevo al más antiguo).
+  static List<(String, List<JournalEntry>)> _byDate(List<JournalEntry> entries) {
+    final groups = <(String, List<JournalEntry>)>[];
+    for (final entry in entries) {
+      if (groups.isNotEmpty && groups.last.$1 == entry.entryDate) {
+        groups.last.$2.add(entry);
+      } else {
+        groups.add((entry.entryDate, [entry]));
+      }
+    }
+    return groups;
+  }
+
+  static String _dayLabel(String date) {
+    final today = limaDate(DateTime.now());
+    final yesterday = limaDate(DateTime.now().subtract(const Duration(days: 1)));
+    if (date == today) return 'Hoy';
+    if (date == yesterday) return 'Ayer';
+    return '${int.parse(date.substring(8, 10))} de ${monthName(date.substring(0, 7))}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final entries = _entries.reversed.toList();
@@ -195,28 +216,38 @@ class _MovementsScreenState extends State<MovementsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Mes anterior',
-                      onPressed: () => _shift(-1),
-                      icon: const Icon(Icons.chevron_left),
-                    ),
-                    Expanded(
-                      child: Text(
-                        periodLabel(_period),
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge,
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: ContabiliColors.line),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Mes anterior',
+                        onPressed: () => _shift(-1),
+                        icon: const Icon(Icons.chevron_left),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Mes siguiente',
-                      onPressed: _period.compareTo(_currentPeriod) >= 0 ? null : () => _shift(1),
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                  ],
+                      Expanded(
+                        child: Text(
+                          periodLabel(_period),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Mes siguiente',
+                        onPressed: _period.compareTo(_currentPeriod) >= 0 ? null : () => _shift(1),
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 8),
                 if (_isClosed) ...[
+                  const SizedBox(height: 4),
                   const Notice(text: 'Este mes está cerrado: ya no se le pueden anotar cosas.'),
                   const SizedBox(height: 10),
                 ],
@@ -229,25 +260,35 @@ class _MovementsScreenState extends State<MovementsScreen> {
                 else if (_error != null)
                   LoadState(error: _error, onRetry: _reload)
                 else if (entries.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Text(
-                      'Todavía no hay nada anotado este mes.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 17, color: ContabiliColors.ink2),
-                    ),
+                  const EmptyState(
+                    title: 'Todavía no hay nada anotado este mes',
+                    message:
+                        'Lo que anotes en Inicio (ventas, gastos, cobros y pagos) aparece aquí.',
                   )
                 else
-                  Card(
-                    child: Column(
-                      children: [
-                        for (final (i, entry) in entries.indexed) ...[
-                          if (i > 0) const Divider(height: 1),
-                          _EntryTile(entry: entry, onTap: () => _open(entry)),
-                        ],
-                      ],
+                  for (final (date, group) in _byDate(entries)) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                      child: Text(
+                        _dayLabel(date),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: ContabiliColors.ink2,
+                        ),
+                      ),
                     ),
-                  ),
+                    Card(
+                      child: Column(
+                        children: [
+                          for (final (i, entry) in group.indexed) ...[
+                            if (i > 0) const Divider(indent: 76),
+                            _EntryTile(entry: entry, onTap: () => _open(entry)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 if (_nextAfter != null) ...[
                   const SizedBox(height: 10),
                   OutlinedButton(onPressed: _more, child: const Text('Ver más')),
@@ -315,6 +356,37 @@ class _ExportSheet extends StatelessWidget {
   }
 }
 
+/// Ícono y colores de cada tipo de movimiento.
+(IconData, Color, Color) entryStyle(EntrySource source) => switch (source) {
+  EntrySource.sale => (
+    Icons.point_of_sale_outlined,
+    ContabiliColors.green,
+    ContabiliColors.greenSoft,
+  ),
+  EntrySource.collection => (
+    Icons.savings_outlined,
+    ContabiliColors.amber,
+    ContabiliColors.goldSoft,
+  ),
+  EntrySource.expense => (
+    Icons.shopping_bag_outlined,
+    ContabiliColors.red,
+    ContabiliColors.redSoft,
+  ),
+  EntrySource.payment => (
+    Icons.outbox_outlined,
+    ContabiliColors.indigo,
+    ContabiliColors.indigoSoft,
+  ),
+  EntrySource.taxPayment => (
+    Icons.account_balance_outlined,
+    ContabiliColors.terracotta,
+    ContabiliColors.terracottaSoft,
+  ),
+  EntrySource.reversal => (Icons.undo_rounded, ContabiliColors.ink2, ContabiliColors.sand),
+  EntrySource.manual => (Icons.edit_note_rounded, ContabiliColors.ink2, ContabiliColors.sand),
+};
+
 class _EntryTile extends StatelessWidget {
   const _EntryTile({required this.entry, required this.onTap});
 
@@ -328,20 +400,45 @@ class _EntryTile extends StatelessWidget {
         : entry.isReversal
         ? 'Anulación'
         : null;
-    return ListTile(
+    final (icon, color, background) = entryStyle(entry.source);
+    return InkWell(
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      title: Text(
-        entry.description,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          decoration: entry.isReversed ? TextDecoration.lineThrough : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            IconBox(icon: icon, color: color, background: background),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.description,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                      decoration: entry.isReversed ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${formatDate(entry.entryDate)}${badge == null ? '' : ' · $badge'}',
+                    style: const TextStyle(fontSize: 14, color: ContabiliColors.ink2),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              formatSoles(entry.total),
+              style: ContabiliFonts.amount(
+                18,
+                color: entry.isReversed ? ContabiliColors.ink3 : color,
+              ).copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
-      ),
-      subtitle: Text('${formatDate(entry.entryDate)}${badge == null ? '' : ' · $badge'}'),
-      trailing: Text(
-        formatSoles(entry.total),
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { BRAND, FAVICON, markSvg } from '../web/brand.js';
+import { DISPLAY_FONT, FONT_FACES, TEXT_FONT } from '../web/fonts.js';
 
 /**
  * Página de pago de una licencia (contabili.pe/pagar/<id>#t=<código>). Es
@@ -8,11 +9,11 @@ import { BRAND, FAVICON, markSvg } from '../web/brand.js';
  * backend; la tarjeta o Yape se ingresan en el checkout de Culqi, así que
  * Contabili no ve los datos de la tarjeta. Sin cookies.
  */
-const STYLE = `
+const STYLE = `${FONT_FACES}
   :root { color-scheme: light; --ink:${BRAND.ink}; --ink2:${BRAND.ink2}; --paper:${BRAND.paper};
     --brand:${BRAND.terracotta}; --line:rgba(30,34,53,.12); --red:${BRAND.red}; --green:${BRAND.green}; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  body { margin:0; font-family: ${TEXT_FONT};
     background: var(--paper); color: var(--ink); }
   main { max-width: 460px; margin: 0 auto; padding: 20px 16px 32px; display: grid; gap: 14px; }
   header { display:flex; align-items:center; gap:10px; }
@@ -20,7 +21,8 @@ const STYLE = `
   .logo svg { width:100%; height:100%; display:block; }
   .muted { color: var(--ink2); font-size: 15px; margin: 0; }
   .card { background:#fff; border:1px solid var(--line); border-radius:20px; padding:18px; }
-  .amount { font-size: 40px; font-weight: 800; margin: 4px 0 8px; letter-spacing: -0.5px; }
+  .amount { font-family: ${DISPLAY_FONT}; font-size: 42px; font-weight: 800; margin: 4px 0 8px;
+    font-variant-numeric: tabular-nums; }
   .help { font-size:14px; line-height:1.45; color:var(--ink2); margin:0; }
   .btn { width:100%; border:0; border-radius:16px; padding:16px; font-size:17px; font-weight:700;
     background: var(--brand); color:#fff; cursor:pointer; }
@@ -235,7 +237,7 @@ export const CHECKOUT_PAGE_CSP = [
   "connect-src 'self' https:",
   'frame-src https:',
   "img-src 'self' data: https:",
-  'font-src https: data:',
+  "font-src 'self' https: data:",
   "base-uri 'none'",
   "form-action 'self' https:",
   "frame-ancestors 'none'",

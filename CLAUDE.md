@@ -69,7 +69,8 @@ Guía para quien programe en este repositorio (personas o Claude).
 - La marca es una chakana de terracota con el Inti (círculo de oro) y un visto bueno de tinta: «todo cuadra». El contorno y los colores viven en `backend/src/web/brand.ts` (`BRAND`, `CHAKANA_POINTS`); la app los replica en `app/lib/ui/theme.dart` (`ContabiliColors`) y `app/lib/ui/brand.dart` (`ContabiliMark`). Si cambia uno, cambia el otro.
 - Paleta: terracota (acción principal), oro (realces y avisos), añil, verde (ingresos y «vas ganando»), rojo (errores y «vas perdiendo») y tinta sobre papel. Los textos sobre color usan la versión oscura y los fondos la suave: el contraste siempre AA.
 - La franja tocapu (`TocapuBand` en la app, `TOCAPU_BAND` en el sitio) va bajo la barra superior y al pie, nunca detrás de texto.
-- Letra Figtree (OFL), servida por el propio backend en el sitio y empaquetada en la app.
+- Letras (OFL): **Saira** para títulos, montos y la marca (formas cuadradas y redondeadas, como piedra labrada) y **Lexend** para el texto (hecha para leer con menos esfuerzo). Las genera `python3 tools/letras.py`: archivos fijos por peso en `app/assets/fonts/` y WOFF2 en `backend/src/web/assets/` (el sitio las sirve en `/fonts/`). Los montos usan cifras de ancho fijo (`ContabiliFonts.amount`).
+- Componentes de la app en `app/lib/ui/`: `HeroPanel` (la cifra principal sobre terracota con trama de chakanas), `SectionTitle` (peldaños de oro), `StatTile`, `IconBox`, `InitialsAvatar`, `EmptyState` con la ilustración de andenes (`AndesIllustration`). En la computadora, barra lateral con la empresa y la persona; en el celular, barra de abajo.
 - Los íconos de la app salen de `python3 tools/iconos.py`, que lee la chakana de `brand.ts`: no los edites a mano.
 
 ## Beta

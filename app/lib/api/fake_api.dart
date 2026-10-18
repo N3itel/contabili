@@ -271,6 +271,13 @@ class FakeContabiliApi implements ContabiliApi {
       createdBy: user.fullName,
       lines: const [],
       total: operation.total,
+      source: switch (operation) {
+        Sale() => EntrySource.sale,
+        Expense() => EntrySource.expense,
+        Collection() => EntrySource.collection,
+        Payment() => EntrySource.payment,
+        TaxPayment() => EntrySource.taxPayment,
+      },
     );
     list.add(entry);
     return OperationResult(
@@ -303,6 +310,7 @@ class FakeContabiliApi implements ContabiliApi {
       lines: const [],
       total: original.total,
       reversesEntryId: original.id,
+      source: EntrySource.reversal,
     );
     list[index] = JournalEntry(
       id: original.id,
@@ -314,6 +322,7 @@ class FakeContabiliApi implements ContabiliApi {
       lines: original.lines,
       total: original.total,
       reversedByEntryId: reversal.id,
+      source: original.source,
     );
     list.add(reversal);
     return reversal;

@@ -5,6 +5,7 @@ import '../core/dates.dart';
 import '../core/money.dart';
 import '../core/operations.dart';
 import '../session/session.dart';
+import '../ui/andean.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
 import 'operation_screen.dart';
@@ -120,24 +121,29 @@ class _TaxesScreenState extends State<TaxesScreen> {
     final igv = taxes.igv;
     final canRecord = _company.role.canRecord;
     return [
-      Card(
-        color: ContabiliColors.goldSoft,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Le tocaría pagar a SUNAT por ${monthName(taxes.period)}',
-                style: const TextStyle(fontSize: 16, color: ContabiliColors.ink2),
+      HeroPanel(
+        colors: const [ContabiliColors.goldLight, ContabiliColors.gold],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Le tocaría pagar a SUNAT por ${monthName(taxes.period)}',
+              style: const TextStyle(fontSize: 16, color: ContabiliColors.ink),
+            ),
+            Text(formatSoles(taxes.total), style: ContabiliFonts.amount(44)),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0x66FFFFFF),
+                borderRadius: BorderRadius.circular(999),
               ),
-              Text(
-                formatSoles(taxes.total),
-                style: const TextStyle(fontSize: 38, fontWeight: FontWeight.w800),
+              child: Text(
+                taxes.regime.label,
+                style: const TextStyle(fontWeight: FontWeight.w600, color: ContabiliColors.ink),
               ),
-              Text(taxes.regime.label, style: const TextStyle(fontWeight: FontWeight.w700)),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
       const SizedBox(height: 12),
@@ -215,13 +221,12 @@ class _TaxCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-                Text(
-                  formatSoles(amount),
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-                ),
+                Text(formatSoles(amount), style: ContabiliFonts.amount(24)),
               ],
             ),
             const SizedBox(height: 8),
+            const Divider(),
+            const SizedBox(height: 6),
             for (final (label, value) in rows)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
@@ -230,7 +235,10 @@ class _TaxCard extends StatelessWidget {
                     Expanded(
                       child: Text(label, style: const TextStyle(color: ContabiliColors.ink2)),
                     ),
-                    Text(formatSoles(value)),
+                    Text(
+                      formatSoles(value),
+                      style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                    ),
                   ],
                 ),
               ),

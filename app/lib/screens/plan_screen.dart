@@ -4,6 +4,7 @@ import '../api/api.dart';
 import '../core/dates.dart';
 import '../core/money.dart';
 import '../session/session.dart';
+import '../ui/andean.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
 
@@ -92,39 +93,46 @@ class _PlanScreenState extends State<PlanScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(switch (license.status) {
-                          LicenseStatus.trial => 'Prueba gratis del plan ${license.planName}',
-                          LicenseStatus.active => 'Plan ${license.planName}',
-                          LicenseStatus.expired => 'Tu plan venció',
-                        }, style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 6),
-                        Text(switch (license.status) {
-                          LicenseStatus.trial =>
-                            'Te quedan ${license.daysLeft} días (hasta el ${formatInstant(license.endsAt)}).',
-                          LicenseStatus.active =>
-                            'Pagado hasta el ${formatInstant(license.endsAt)}.',
-                          LicenseStatus.expired =>
-                            'Venció el ${formatInstant(license.endsAt)}. Tu empresa está en solo '
-                                'lectura: renueva para seguir anotando.',
-                        }, style: const TextStyle(fontSize: 17)),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${license.members} de ${license.maxMembers} personas en tu equipo.',
-                          style: const TextStyle(color: ContabiliColors.ink2),
-                        ),
-                      ],
-                    ),
+                HeroPanel(
+                  colors: license.status == LicenseStatus.expired
+                      ? const [ContabiliColors.ink2, ContabiliColors.ink]
+                      : const [ContabiliColors.indigo, Color(0xFF243256)],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(switch (license.status) {
+                        LicenseStatus.trial => 'Prueba gratis del plan ${license.planName}',
+                        LicenseStatus.active => 'Plan ${license.planName}',
+                        LicenseStatus.expired => 'Tu plan venció',
+                      }, style: ContabiliFonts.title(24, color: Colors.white)),
+                      const SizedBox(height: 6),
+                      Text(switch (license.status) {
+                        LicenseStatus.trial =>
+                          'Te quedan ${license.daysLeft} días (hasta el ${formatInstant(license.endsAt)}).',
+                        LicenseStatus.active => 'Pagado hasta el ${formatInstant(license.endsAt)}.',
+                        LicenseStatus.expired =>
+                          'Venció el ${formatInstant(license.endsAt)}. Tu empresa está en solo '
+                              'lectura: renueva para seguir anotando.',
+                      }, style: const TextStyle(fontSize: 17, color: Colors.white)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(Icons.group_outlined, color: ContabiliColors.goldLight),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${license.members} de ${license.maxMembers} personas en tu equipo.',
+                              style: const TextStyle(color: Color(0xDDFFFFFF)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(height: 8),
                 const SizedBox(height: 20),
-                Text('Elige tu plan', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 10),
+                const SectionTitle('Elige tu plan'),
                 SegmentedButton<BillingCycle>(
                   showSelectedIcon: false,
                   segments: const [
@@ -145,24 +153,29 @@ class _PlanScreenState extends State<PlanScreen> {
                     children: [
                       for (final plan in billing.plans) ...[
                         Card(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            side: BorderSide(
+                              color: plan.code == _plan
+                                  ? ContabiliColors.terracotta
+                                  : ContabiliColors.line,
+                              width: plan.code == _plan ? 2 : 1,
+                            ),
+                          ),
                           child: RadioListTile<String>(
                             value: plan.code,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             // En dos líneas: con letra grande, nombre y precio no entran lado a lado.
-                            title: Text(
-                              plan.name,
-                              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-                            ),
+                            title: Text(plan.name, style: ContabiliFonts.title(22)),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   '${formatSoles(plan.price(_cycle))} '
                                   '${_cycle == BillingCycle.monthly ? 'al mes' : 'al año'}',
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
-                                    color: ContabiliColors.ink,
+                                  style: ContabiliFonts.amount(
+                                    20,
+                                    color: ContabiliColors.terracottaDark,
                                   ),
                                 ),
                                 Text('${plan.tagline} Hasta ${plan.maxMembers} personas.'),

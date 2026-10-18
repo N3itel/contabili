@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../api/api.dart';
+import '../core/money.dart';
+import 'andean.dart';
 import 'theme.dart';
 
 /// Ancho cómodo para leer en una computadora: el contenido no se estira.
@@ -43,7 +45,11 @@ class Notice extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: foreground.withValues(alpha: 0.18)),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -153,6 +159,203 @@ class ChoiceRow<T> extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Título de sección con los peldaños de oro y, si hace falta, una acción.
+class SectionTitle extends StatelessWidget {
+  const SectionTitle(this.text, {super.key, this.action});
+
+  final String text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          const StepGlyph(),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(text, style: Theme.of(context).textTheme.titleLarge),
+            ),
+          ),
+          ?action,
+        ],
+      ),
+    );
+  }
+}
+
+/// Ícono dentro de un cuadro redondeado de color suave.
+class IconBox extends StatelessWidget {
+  const IconBox({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.background,
+    this.size = 46,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color background;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(size * 0.32)),
+    child: Icon(icon, color: color, size: size * 0.52),
+  );
+}
+
+/// Una cifra con su ícono, nombre y explicación corta.
+class StatTile extends StatelessWidget {
+  const StatTile({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.amount,
+    required this.detail,
+    this.color = ContabiliColors.ink,
+    this.iconColor = ContabiliColors.terracotta,
+    this.iconBackground = ContabiliColors.terracottaSoft,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Cents amount;
+  final String detail;
+  final Color color;
+  final Color iconColor;
+  final Color iconBackground;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconBox(icon: icon, color: iconColor, background: iconBackground),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 15, color: ContabiliColors.ink2)),
+                    const SizedBox(height: 2),
+                    Text(formatSoles(amount), style: ContabiliFonts.amount(26, color: color)),
+                    const SizedBox(height: 4),
+                    Text(detail, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              if (onTap != null) const Icon(Icons.chevron_right, color: ContabiliColors.ink3),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Iniciales en un cuadro de color, como un tocapu: distingue a cada cliente,
+/// empresa o persona de un vistazo.
+class InitialsAvatar extends StatelessWidget {
+  const InitialsAvatar({super.key, required this.name, this.size = 44});
+
+  final String name;
+  final double size;
+
+  static const _tones = [
+    (ContabiliColors.terracottaSoft, ContabiliColors.terracottaDark),
+    (ContabiliColors.goldSoft, ContabiliColors.amber),
+    (ContabiliColors.indigoSoft, ContabiliColors.indigo),
+    (ContabiliColors.greenSoft, ContabiliColors.green),
+  ];
+
+  String get _initials {
+    final words = name
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty && w.toUpperCase() != w.toLowerCase())
+        .toList();
+    if (words.isEmpty) return '?';
+    final first = words.first.characters.first;
+    final second = words.length > 1 ? words[1].characters.first : '';
+    return (first + second).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (background, foreground) =
+        _tones[name.codeUnits.fold(0, (a, b) => a + b) % _tones.length];
+    return ExcludeSemantics(
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(size * 0.3),
+        ),
+        child: Text(
+          _initials,
+          style: TextStyle(
+            fontFamily: ContabiliFonts.display,
+            fontWeight: FontWeight.w800,
+            fontSize: size * 0.4,
+            color: foreground,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pantalla vacía con los andenes: qué falta y qué hacer.
+class EmptyState extends StatelessWidget {
+  const EmptyState({super.key, required this.title, required this.message, this.action});
+
+  final String title;
+  final String message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const AndesIllustration(height: 120),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              children: [
+                Text(title, textAlign: TextAlign.center, style: ContabiliFonts.title(21)),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16, color: ContabiliColors.ink2, height: 1.45),
+                ),
+                if (action != null) ...[const SizedBox(height: 16), action!],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

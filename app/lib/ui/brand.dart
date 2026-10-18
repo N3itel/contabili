@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 
 /// Contorno de la chakana en un cuadro de 100 × 100, igual que en el sitio.
-const _chakana = [
+const chakanaPoints = [
   Offset(35, 5), Offset(65, 5), Offset(65, 20), Offset(80, 20), Offset(80, 35), //
   Offset(95, 35), Offset(95, 65), Offset(80, 65), Offset(80, 80), Offset(65, 80),
   Offset(65, 95), Offset(35, 95), Offset(35, 80), Offset(20, 80), Offset(20, 65),
@@ -34,7 +34,7 @@ class _MarkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width / 100;
-    final chakana = Path()..addPolygon([for (final p in _chakana) p * s], true);
+    final chakana = Path()..addPolygon([for (final p in chakanaPoints) p * s], true);
     canvas.drawPath(chakana, Paint()..color = ContabiliColors.terracotta);
     canvas.drawCircle(Offset(50 * s, 50 * s), 16 * s, Paint()..color = ContabiliColors.gold);
     final check = Path()
@@ -78,6 +78,8 @@ class _TocapuPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Unidad de 32 × 12, escalada al alto pedido.
     final k = size.height / 12;
+    // Sin recorte, la última unidad se dibujaría fuera de la franja.
+    canvas.clipRect(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, Paint()..color = ContabiliColors.terracotta);
     final gold = Paint()..color = ContabiliColors.gold;
     final ink = Paint()..color = ContabiliColors.ink.withValues(alpha: 0.9);

@@ -140,7 +140,8 @@ void main() {
 
     // El resumen viene del backend: 118 en caja, -59 en el banco, IGV 18 - 9 = 9.
     await _waitFor(tester, find.text('S/ 59.00'));
-    expect(find.text('Caja S/ 118.00 · Bancos -S/ 59.00'), findsOneWidget);
+    expect(find.text('Caja S/ 118.00'), findsOneWidget);
+    expect(find.text('Bancos -S/ 59.00'), findsOneWidget);
     expect(find.text('S/ 9.00'), findsOneWidget);
     await _shot(tester, '6-inicio');
 

@@ -200,6 +200,23 @@ class EntryLine {
   final Cents credit;
 }
 
+/// De dónde salió un asiento: decide su ícono y si la plata entra o sale.
+enum EntrySource {
+  manual('manual'),
+  sale('sale'),
+  expense('expense'),
+  collection('collection'),
+  payment('payment'),
+  taxPayment('tax_payment'),
+  reversal('reversal');
+
+  const EntrySource(this.wire);
+  final String wire;
+
+  static EntrySource fromWire(String? wire) =>
+      values.firstWhere((s) => s.wire == wire, orElse: () => manual);
+}
+
 class JournalEntry {
   const JournalEntry({
     required this.id,
@@ -212,6 +229,7 @@ class JournalEntry {
     required this.total,
     this.reversesEntryId,
     this.reversedByEntryId,
+    this.source = EntrySource.manual,
   });
 
   factory JournalEntry.fromJson(Json json) => JournalEntry(
@@ -225,6 +243,7 @@ class JournalEntry {
     total: (json['totals'] as Json)['debit'] as int,
     reversesEntryId: json['reversesEntryId'] as String?,
     reversedByEntryId: json['reversedByEntryId'] as String?,
+    source: EntrySource.fromWire(json['source'] as String?),
   );
 
   final String id;
@@ -237,6 +256,7 @@ class JournalEntry {
   final Cents total;
   final String? reversesEntryId;
   final String? reversedByEntryId;
+  final EntrySource source;
 
   bool get isReversal => reversesEntryId != null;
   bool get isReversed => reversedByEntryId != null;

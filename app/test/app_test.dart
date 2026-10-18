@@ -108,7 +108,8 @@ void main() {
 
     // Inicio se actualiza: entró al banco y se ve en «Plata disponible».
     expect(find.text('S/ 118.00'), findsOneWidget);
-    expect(find.text('Caja S/ 0.00 · Bancos S/ 118.00'), findsOneWidget);
+    expect(find.text('Caja S/ 0.00'), findsOneWidget);
+    expect(find.text('Bancos S/ 118.00'), findsOneWidget);
   });
 
   testWidgets('gasto sin factura y en el Nuevo RUS no separa IGV', (tester) async {
@@ -319,7 +320,8 @@ void main() {
   testWidgets('en la computadora, la navegación va al costado', (tester) async {
     final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
     await _Harness(api).pump(tester, size: const Size(1280, 800));
-    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byKey(const Key('sidebar')), findsOneWidget);
+    expect(find.text('Hola, Rosa'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('¿Qué pasó hoy?'), findsOneWidget);
   });

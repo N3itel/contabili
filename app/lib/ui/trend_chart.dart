@@ -31,45 +31,63 @@ class TrendChart extends StatelessWidget {
           children: [
             SizedBox(
               height: height,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              child: Stack(
                 children: [
-                  for (final p in points)
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            _Bar(
-                              value: p.sales,
-                              max: max,
-                              color: ContabiliColors.green,
-                              height: height,
+                  // Líneas guía tenues, como los andenes.
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      for (var i = 0; i < 4; i++)
+                        Container(height: 1, color: ContabiliColors.line.withValues(alpha: 0.5)),
+                    ],
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final p in points)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                _Bar(
+                                  value: p.sales,
+                                  max: max,
+                                  color: ContabiliColors.green,
+                                  height: height,
+                                ),
+                                const SizedBox(width: 3),
+                                _Bar(
+                                  value: p.expenses,
+                                  max: max,
+                                  color: ContabiliColors.terracotta,
+                                  height: height,
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 3),
-                            _Bar(
-                              value: p.expenses,
-                              max: max,
-                              color: ContabiliColors.terracotta,
-                              height: height,
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
+                    ],
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               children: [
-                for (final p in points)
+                for (final (i, p) in points.indexed)
                   Expanded(
                     child: Text(
                       monthName(p.period).substring(0, 3),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 13, color: ContabiliColors.ink2),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: i == points.length - 1 ? FontWeight.w700 : FontWeight.w400,
+                        color: i == points.length - 1
+                            ? ContabiliColors.terracottaDark
+                            : ContabiliColors.ink2,
+                      ),
                     ),
                   ),
               ],
@@ -103,7 +121,14 @@ class _Bar extends StatelessWidget {
       height: value <= 0 ? 2 : (value / max * height).clamp(4, height),
       decoration: BoxDecoration(
         color: value <= 0 ? ContabiliColors.line : color,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
+        gradient: value <= 0
+            ? null
+            : LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [color, Color.lerp(color, Colors.black, 0.18)!],
+              ),
       ),
     ),
   );
@@ -118,7 +143,11 @@ class _Legend extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      Container(width: 12, height: 12, color: color),
+      Container(
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+      ),
       const SizedBox(width: 6),
       Text(label, style: const TextStyle(fontSize: 14)),
     ],

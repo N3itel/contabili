@@ -18,76 +18,99 @@ class MoreScreen extends StatelessWidget {
     final user = session.user;
     final company = session.company!;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
         ReadableWidth(
-          maxWidth: 600,
+          maxWidth: 640,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (user != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    '${user.fullName}\n${company.role.label} en ${company.legalName}',
-                    style: const TextStyle(fontSize: 16, color: ContabiliColors.ink2),
+              if (user != null) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        InitialsAvatar(name: user.fullName, size: 54),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(user.fullName, style: ContabiliFonts.title(21)),
+                              Text(
+                                '${company.role.label} en ${company.legalName}',
+                                style: const TextStyle(fontSize: 15, color: ContabiliColors.ink2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
+                const SizedBox(height: 20),
+              ],
+              const SectionTitle('Tu empresa'),
               Card(
                 child: Column(
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.account_balance_outlined),
-                      title: const Text('Impuestos del mes'),
-                      subtitle: const Text('Cuánto te toca pagar a SUNAT'),
-                      trailing: const Icon(Icons.chevron_right),
+                    _MoreTile(
+                      icon: Icons.account_balance_outlined,
+                      color: ContabiliColors.amber,
+                      background: ContabiliColors.goldSoft,
+                      title: 'Impuestos del mes',
+                      subtitle: 'Cuánto te toca pagar a SUNAT',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => TaxesScreen(session: session, changes: changes),
                         ),
                       ),
                     ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.group_outlined),
-                      title: const Text('Tu equipo'),
-                      subtitle: const Text('Invita a tu contador o a tu personal'),
-                      trailing: const Icon(Icons.chevron_right),
+                    const Divider(indent: 76),
+                    _MoreTile(
+                      icon: Icons.group_outlined,
+                      color: ContabiliColors.indigo,
+                      background: ContabiliColors.indigoSoft,
+                      title: 'Tu equipo',
+                      subtitle: 'Invita a tu contador o a tu personal',
                       onTap: () => Navigator.of(
                         context,
                       ).push(MaterialPageRoute(builder: (_) => TeamScreen(session: session))),
                     ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.swap_horiz),
-                      title: const Text('Cambiar de empresa'),
-                      trailing: const Icon(Icons.chevron_right),
+                    const Divider(indent: 76),
+                    _MoreTile(
+                      icon: Icons.swap_horiz,
+                      color: ContabiliColors.green,
+                      background: ContabiliColors.greenSoft,
+                      title: 'Cambiar de empresa',
                       onTap: session.leaveCompany,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 24),
+              const SectionTitle('Ayuda y legal'),
               Card(
                 child: Column(
                   children: [
-                    ListTile(
-                      leading: const Icon(Icons.description_outlined),
-                      title: const Text('Términos y condiciones'),
-                      trailing: const Icon(Icons.open_in_new, size: 20),
+                    _MoreTile(
+                      icon: Icons.description_outlined,
+                      title: 'Términos y condiciones',
+                      external: true,
                       onTap: () => session.openLink(session.page('/terminos')),
                     ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.privacy_tip_outlined),
-                      title: const Text('Privacidad'),
-                      trailing: const Icon(Icons.open_in_new, size: 20),
+                    const Divider(indent: 76),
+                    _MoreTile(
+                      icon: Icons.privacy_tip_outlined,
+                      title: 'Privacidad',
+                      external: true,
                       onTap: () => session.openLink(session.page('/privacidad')),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               OutlinedButton.icon(
                 onPressed: session.logout,
                 icon: const Icon(Icons.logout),
@@ -97,6 +120,42 @@ class MoreScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MoreTile extends StatelessWidget {
+  const _MoreTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+    this.color = ContabiliColors.terracotta,
+    this.background = ContabiliColors.terracottaSoft,
+    this.external = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Color color;
+  final Color background;
+  final bool external;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      leading: IconBox(icon: icon, color: color, background: background, size: 44),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle!),
+      trailing: Icon(
+        external ? Icons.open_in_new : Icons.chevron_right,
+        size: external ? 20 : 24,
+        color: ContabiliColors.ink3,
+      ),
+      onTap: onTap,
     );
   }
 }

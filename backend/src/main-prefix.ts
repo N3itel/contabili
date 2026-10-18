@@ -14,5 +14,5 @@ export const PREFIX_EXCLUDE = [
   'pagar/:id',
   'terminos',
   'privacidad',
-  'fonts/figtree.ttf',
+  'fonts/:file',
 ];

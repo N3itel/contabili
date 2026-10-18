@@ -1,11 +1,11 @@
-import { readFileSync } from 'node:fs';
-import { Controller, Get, Header, Inject, Res } from '@nestjs/common';
+import { Controller, Get, Header, Inject, Param, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { Public } from '../auth/auth.guard.js';
 import { PLAN_CODES, PLANS, TRIAL_DAYS } from '../billing/plans.js';
 import type { Env } from '../config/env.js';
 import { TERMS_VERSION } from '../users/consent.js';
+import { FONT_FILES } from './fonts.js';
 import type { WebPage } from './layout.js';
 import { privacyPage, termsPage } from './legal-pages.js';
 import { MY_PLAN_PAGE } from './my-plan-page.js';
@@ -35,9 +35,6 @@ function downloadLinks(config: ConfigService<Env, true>): DownloadLinks {
     ios: get('APP_IOS_URL'),
   };
 }
-
-/** La letra del sitio (Figtree, licencia OFL), servida por nosotros: sin recursos de terceros. */
-const FIGTREE = readFileSync(new URL('./assets/Figtree-Variable.ttf', import.meta.url));
 
 /** El sitio público, fuera del prefijo de la API. */
 @Public()
@@ -78,16 +75,21 @@ export class WebPagesController {
     send(res, MY_PLAN_PAGE, 'no-store');
   }
 
-  @Get('fonts/figtree.ttf')
-  font(@Res() res: Response): void {
+  @Get('fonts/:file')
+  font(@Param('file') file: string, @Res() res: Response): void {
+    const data = Object.hasOwn(FONT_FILES, file) ? FONT_FILES[file] : undefined;
+    if (!data) {
+      res.status(404).end();
+      return;
+    }
     // Con @Res y end(): Nest no convierte el archivo en JSON ni Express le agrega charset.
     res.writeHead(200, {
-      'Content-Type': 'font/ttf',
-      'Content-Length': FIGTREE.length,
+      'Content-Type': 'font/woff2',
+      'Content-Length': data.length,
       'Cache-Control': 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
     });
-    res.end(FIGTREE);
+    res.end(data);
   }
 
   @Get('terminos')

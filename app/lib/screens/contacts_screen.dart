@@ -84,61 +84,48 @@ class _ContactsScreenState extends State<ContactsScreen> {
                   onSelectionChanged: (s) => setState(() => _kind = s.first),
                 ),
                 const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          customers ? 'Te deben en total' : 'Debes en total',
-                          style: const TextStyle(color: ContabiliColors.ink2, fontSize: 16),
-                        ),
-                        Text(
-                          formatSoles(total),
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: customers ? ContabiliColors.green : ContabiliColors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                StatTile(
+                  icon: customers ? Icons.call_received_rounded : Icons.call_made_rounded,
+                  iconColor: customers ? ContabiliColors.green : ContabiliColors.red,
+                  iconBackground: customers ? ContabiliColors.greenSoft : ContabiliColors.redSoft,
+                  label: customers ? 'Te deben en total' : 'Debes en total',
+                  amount: total,
+                  color: customers ? ContabiliColors.green : ContabiliColors.red,
+                  detail: customers
+                      ? '${list.where((c) => c.balance > 0).length} de ${list.length} clientes tienen algo pendiente.'
+                      : '${list.where((c) => c.balance > 0).length} de ${list.length} proveedores esperan un pago.',
                 ),
                 const SizedBox(height: 12),
                 if (list.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      customers
-                          ? 'Todavía no tienes clientes. Agrégalos para saber quién te debe.'
-                          : 'Todavía no tienes proveedores. Agrégalos para saber a quién le debes.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 17, color: ContabiliColors.ink2),
-                    ),
+                  EmptyState(
+                    title: customers
+                        ? 'Todavía no tienes clientes'
+                        : 'Todavía no tienes proveedores',
+                    message: customers
+                        ? 'Agrégalos para saber quién te debe y cuánto.'
+                        : 'Agrégalos para saber a quién le debes y cuánto.',
                   )
                 else
                   Card(
                     child: Column(
                       children: [
                         for (final (i, c) in list.indexed) ...[
-                          if (i > 0) const Divider(height: 1),
+                          if (i > 0) const Divider(indent: 76),
                           ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            leading: InitialsAvatar(name: c.name),
                             title: Text(
                               c.name,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
+                              style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
                             subtitle: Text(c.ruc == null ? c.kind.label : 'RUC ${c.ruc}'),
                             trailing: Text(
                               formatSoles(c.balance),
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
+                              style: ContabiliFonts.amount(
+                                18,
                                 color: c.balance > 0
                                     ? (customers ? ContabiliColors.green : ContabiliColors.red)
-                                    : ContabiliColors.ink2,
+                                    : ContabiliColors.ink3,
                               ),
                             ),
                             onTap: () => Navigator.of(context).push(
@@ -216,25 +203,39 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              Text(
-                                detail.contact.kind == ContactKind.customer
-                                    ? 'Te debe'
-                                    : 'Le debes',
-                                style: const TextStyle(color: ContabiliColors.ink2),
+                              InitialsAvatar(name: detail.contact.name, size: 58),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      detail.contact.kind == ContactKind.customer
+                                          ? 'Te debe'
+                                          : 'Le debes',
+                                      style: const TextStyle(color: ContabiliColors.ink2),
+                                    ),
+                                    Text(
+                                      formatSoles(detail.contact.balance),
+                                      style: ContabiliFonts.amount(32),
+                                    ),
+                                    Text(
+                                      detail.contact.ruc == null
+                                          ? detail.contact.kind.label
+                                          : '${detail.contact.kind.label} · RUC ${detail.contact.ruc}',
+                                      style: const TextStyle(color: ContabiliColors.ink2),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              Text(
-                                formatSoles(detail.contact.balance),
-                                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800),
-                              ),
-                              if (detail.contact.ruc != null) Text('RUC ${detail.contact.ruc}'),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 20),
+                      const SectionTitle('Movimientos'),
                       if (detail.movements.isEmpty)
                         const Padding(
                           padding: EdgeInsets.all(24),
@@ -249,7 +250,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                           child: Column(
                             children: [
                               for (final (i, m) in detail.movements.reversed.indexed) ...[
-                                if (i > 0) const Divider(height: 1),
+                                if (i > 0) const Divider(),
                                 ListTile(
                                   title: Text(m.description),
                                   subtitle: Text(
@@ -257,7 +258,12 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                                   ),
                                   trailing: Text(
                                     '${m.amount > 0 ? '+' : ''}${formatSoles(m.amount)}',
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                    style: ContabiliFonts.amount(
+                                      17,
+                                      color: m.amount > 0
+                                          ? ContabiliColors.ink
+                                          : ContabiliColors.green,
+                                    ),
                                   ),
                                 ),
                               ],

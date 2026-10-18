@@ -1,29 +1,29 @@
 import { createHash } from 'node:crypto';
 import { BRAND, CHAKANA_TEXTURE, FAVICON, markSvg, TOCAPU_BAND } from './brand.js';
+import { DISPLAY_FONT, FONT_FACES, TEXT_FONT } from './fonts.js';
 
 /**
  * Páginas públicas que sirve el backend fuera del prefijo de la API. Son
  * fijas: estilos y scripts propios van por hash en la CSP, sin cookies ni
- * recursos de terceros (la letra Figtree se sirve desde /fonts). Estilo
+ * recursos de terceros (las letras Saira y Lexend se sirven desde /fonts). Estilo
  * incaico moderno: paleta andina, chakana y franjas tocapu. Letra grande y
  * botones anchos: tienen que poder usarse sin experiencia y desde el celular.
  */
 export const STYLE = `
-  @font-face { font-family: Figtree; src: url(/fonts/figtree.ttf) format("truetype");
-    font-weight: 300 900; font-display: swap; }
+${FONT_FACES}
   :root { color-scheme: light; --ink:${BRAND.ink}; --ink2:${BRAND.ink2}; --paper:${BRAND.paper};
     --terracotta:${BRAND.terracotta}; --terracotta-dark:${BRAND.terracottaDark};
     --terracotta-soft:${BRAND.terracottaSoft}; --gold:${BRAND.gold}; --gold-soft:${BRAND.goldSoft};
     --green:${BRAND.green}; --green-soft:${BRAND.greenSoft}; --line:rgba(30,34,53,.12); --red:${BRAND.red}; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: Figtree, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  body { margin:0; font-family: ${TEXT_FONT};
     background: var(--paper); color: var(--ink); line-height: 1.55; font-size: 17px; }
   .tocapu { height: 12px; background: url("${TOCAPU_BAND}") repeat-x; }
   main { max-width: 1000px; margin: 0 auto; padding: 16px 16px 48px; }
   .narrow { max-width: 560px; margin: 0 auto; }
   nav.top { display:flex; align-items:center; gap: 10px 18px; flex-wrap: wrap; margin: 6px 0 8px; }
   nav.top .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink);
-    font-weight: 800; font-size: 20px; margin-right: auto; letter-spacing: -0.2px; }
+    font-family: ${DISPLAY_FONT}; font-weight: 800; font-size: 22px; margin-right: auto; letter-spacing: -0.2px; }
   nav.top a { color: var(--ink); font-weight: 600; text-decoration: none; }
   nav.top a:hover { color: var(--terracotta); }
   .logo { width:40px; height:40px; flex: none; display:block; }
@@ -32,13 +32,14 @@ export const STYLE = `
     color: var(--ink); background: var(--gold); border-radius: 6px; padding: 2px 7px; }
   .hero { position: relative; margin: 18px -16px 0; padding: 28px 16px 34px;
     background: var(--gold-soft) url("${CHAKANA_TEXTURE}"); border-radius: 0 0 28px 28px; }
-  h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.08; margin: 10px 0 12px; letter-spacing: -1px;
-    font-weight: 850; }
+  h1, h2, h3, .price { font-family: ${DISPLAY_FONT}; }
+  h1 { font-size: clamp(32px, 6vw, 54px); line-height: 1.08; margin: 10px 0 12px; letter-spacing: -0.5px;
+    font-weight: 800; }
   h1 em { font-style: normal; color: var(--terracotta); }
-  h2 { font-size: 25px; margin: 38px 0 10px; letter-spacing: -0.3px; }
+  h2 { font-size: 27px; margin: 38px 0 10px; font-weight: 700; }
   h2::after { content: ""; display: block; width: 48px; height: 6px; margin-top: 8px;
     background: url("${TOCAPU_BAND}") repeat-x; background-size: auto 6px; border-radius: 2px; }
-  h3 { font-size: 19px; margin: 0 0 6px; }
+  h3 { font-size: 20px; margin: 0 0 6px; font-weight: 700; }
   p, li { font-size: 17px; }
   a { color: var(--terracotta); }
   .lead { font-size: 20px; color: var(--ink2); max-width: 660px; }
@@ -51,7 +52,7 @@ export const STYLE = `
   .card > :first-child { margin-top: 0; }
   .card .icon { width: 44px; height: 44px; border-radius: 12px; display:grid; place-items:center;
     background: var(--terracotta-soft); color: var(--terracotta); font-weight: 900; font-size: 20px; margin-bottom: 10px; }
-  .price { font-size: 40px; font-weight: 850; margin: 6px 0 0; letter-spacing: -0.8px; }
+  .price { font-size: 42px; font-weight: 800; margin: 6px 0 0; font-variant-numeric: tabular-nums; }
   .price small { font-size: 16px; font-weight: 600; color: var(--ink2); }
   .tag { display:inline-block; background: var(--terracotta); color: #fff; font-weight: 800;
     font-size: 13px; padding: 3px 10px; border-radius: 99px; letter-spacing: .3px; }
@@ -59,7 +60,7 @@ export const STYLE = `
   ul.checks li { padding-left: 30px; position: relative; margin: 8px 0; }
   ul.checks li::before { content: ""; position: absolute; left: 4px; top: 7px; width: 14px; height: 14px;
     background: var(--gold); clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%); }
-  .btn { display:block; width:100%; border:0; border-radius:14px; padding:16px; font-size:18px; font-weight:800;
+  .btn { display:block; width:100%; border:0; border-radius:14px; padding:16px; font-size:18px; font-weight:600;
     background: var(--terracotta); color:#fff; cursor:pointer; margin-top: 12px; text-align:center;
     text-decoration:none; font-family: inherit; }
   .btn:hover { background: var(--terracotta-dark); }

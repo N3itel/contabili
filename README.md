@@ -39,7 +39,8 @@ de prueba se compilan desde GitHub Actions.
   punta contra el backend.
 - **Diseño incaico moderno**: la marca es una chakana de terracota con el Inti
   y un visto bueno («todo cuadra»); franjas tocapu, paleta andina (terracota,
-  oro, añil, verde y papel) y la letra Figtree, iguales en el sitio y la app.
+  oro, añil, verde y papel) y las letras Saira (títulos y montos) y Lexend (texto),
+  iguales en el sitio y la app. En la computadora, barra lateral como un programa de escritorio.
 - **Sitio público** (lo sirve el backend): portada, `/precios`, `/descargas`,
   `/mi-plan` (ingresar y pagar desde el navegador), `/pagar/<orden>` y los
   borradores de `/terminos` y `/privacidad`.

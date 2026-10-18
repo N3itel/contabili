@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/api.dart';
+import '../ui/andean.dart';
 import '../ui/brand.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
@@ -118,54 +119,63 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final form = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(switch (_step) {
+          _Step.phone => 'Tu contabilidad, tan fácil como anotar una venta',
+          _Step.code => 'Escribe el código',
+          _Step.name => '¿Cómo te llamas?',
+        }, style: theme.textTheme.headlineMedium),
+        const SizedBox(height: 8),
+        Text(switch (_step) {
+          _Step.phone =>
+            'Entra con tu celular. Te enviamos un código por SMS; '
+                'no hay contraseñas que recordar.',
+          _Step.code => 'Te lo enviamos por SMS al $_normalizedPhone.',
+          _Step.name => 'Es la primera vez que entras con este número.',
+        }, style: theme.textTheme.bodyLarge?.copyWith(color: ContabiliColors.ink2)),
+        const SizedBox(height: 24),
+        ...switch (_step) {
+          _Step.phone => _phoneStep(),
+          _Step.code => _codeStep(),
+          _Step.name => _nameStep(),
+        },
+        ErrorText(_error),
+      ],
+    );
+    if (MediaQuery.sizeOf(context).width >= 900) {
+      return Scaffold(
+        body: Row(
+          children: [
+            const Expanded(flex: 5, child: _BrandPanel()),
+            Expanded(
+              flex: 4,
+              child: SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(40),
+                    child: ReadableWidth(maxWidth: 440, child: form),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       bottomNavigationBar: const SafeArea(top: false, child: TocapuBand(height: 14)),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-          child: ReadableWidth(
-            maxWidth: 480,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Row(
-                  children: [
-                    ContabiliMark(size: 44),
-                    SizedBox(width: 12),
-                    Flexible(
-                      child: Text(
-                        'Contabili',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    SizedBox(width: 10),
-                    BetaBadge(),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                Text(switch (_step) {
-                  _Step.phone => 'Tu contabilidad, tan fácil como anotar una venta',
-                  _Step.code => 'Escribe el código',
-                  _Step.name => '¿Cómo te llamas?',
-                }, style: theme.textTheme.headlineMedium),
-                const SizedBox(height: 8),
-                Text(switch (_step) {
-                  _Step.phone =>
-                    'Entra con tu celular. Te enviamos un código por SMS; '
-                        'no hay contraseñas que recordar.',
-                  _Step.code => 'Te lo enviamos por SMS al $_normalizedPhone.',
-                  _Step.name => 'Es la primera vez que entras con este número.',
-                }, style: theme.textTheme.bodyLarge?.copyWith(color: ContabiliColors.ink2)),
-                const SizedBox(height: 24),
-                ...switch (_step) {
-                  _Step.phone => _phoneStep(),
-                  _Step.code => _codeStep(),
-                  _Step.name => _nameStep(),
-                },
-                ErrorText(_error),
-              ],
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _PhoneHeader(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+              child: ReadableWidth(maxWidth: 480, child: form),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -272,5 +282,165 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Text(_busy ? 'Creando tu cuenta…' : 'Crear mi cuenta'),
       ),
     ];
+  }
+}
+
+/// La marca sobre terracota, para el ingreso.
+class _MarkOnColor extends StatelessWidget {
+  const _MarkOnColor({this.size = 44});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: EdgeInsets.all(size * 0.16),
+    decoration: BoxDecoration(
+      color: ContabiliColors.paper,
+      borderRadius: BorderRadius.circular(size * 0.36),
+      boxShadow: const [BoxShadow(color: Color(0x335E2116), blurRadius: 12, offset: Offset(0, 4))],
+    ),
+    child: ContabiliMark(size: size),
+  );
+}
+
+class _Wordmark extends StatelessWidget {
+  const _Wordmark({this.size = 28});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      _MarkOnColor(size: size * 1.4),
+      const SizedBox(width: 14),
+      Flexible(
+        child: Text(
+          'Contabili',
+          style: ContabiliFonts.title(
+            size,
+            color: Colors.white,
+          ).copyWith(fontWeight: FontWeight.w800),
+        ),
+      ),
+      const SizedBox(width: 10),
+      const BetaBadge(),
+    ],
+  );
+}
+
+/// Encabezado del ingreso en el celular: terracota, chakanas y andenes.
+class _PhoneHeader extends StatelessWidget {
+  const _PhoneHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [ContabiliColors.terracotta, ContabiliColors.terracottaDark],
+        ),
+      ),
+      child: CustomPaint(
+        painter: ChakanaPattern(color: Colors.white.withValues(alpha: 0.07)),
+        child: const SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(padding: EdgeInsets.fromLTRB(20, 20, 20, 8), child: _Wordmark()),
+              AndesIllustration(height: 110, night: true),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Panel de la marca en la computadora: qué es Contabili, en tres frases.
+class _BrandPanel extends StatelessWidget {
+  const _BrandPanel();
+
+  static const _benefits = [
+    'Anota ventas y gastos con un toque: el asiento contable se arma solo.',
+    'Sabe cuánto te toca pagar a SUNAT cada mes, sin sorpresas.',
+    'En el celular y en la computadora, con tu equipo y tu contador.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            ContabiliColors.terracotta,
+            ContabiliColors.terracottaDark,
+            ContabiliColors.terracottaDeep,
+          ],
+        ),
+      ),
+      child: CustomPaint(
+        painter: ChakanaPattern(color: Colors.white.withValues(alpha: 0.06), cell: 60, mark: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(48, 48, 48, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _Wordmark(size: 32),
+                    const SizedBox(height: 56),
+                    Text(
+                      'Lleva las cuentas de tu negocio sin ser contador',
+                      style: ContabiliFonts.title(42, color: Colors.white),
+                    ),
+                    const SizedBox(height: 28),
+                    for (final benefit in _benefits) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: ContabiliColors.gold,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              size: 18,
+                              color: ContabiliColors.ink,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              benefit,
+                              style: const TextStyle(
+                                color: Color(0xF2FFFFFF),
+                                fontSize: 18,
+                                height: 1.45,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const AndesIllustration(height: 170, night: true),
+            const TocapuBand(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 }

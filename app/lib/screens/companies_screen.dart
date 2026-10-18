@@ -127,12 +127,13 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                           Card(
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 8,
+                                horizontal: 16,
+                                vertical: 10,
                               ),
+                              leading: InitialsAvatar(name: company.legalName, size: 50),
                               title: Text(
                                 company.legalName,
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
                               ),
                               subtitle: Text('RUC ${company.ruc} · ${company.role.label}'),
                               trailing: const Icon(Icons.chevron_right),
@@ -140,6 +141,15 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
+                        ],
+                        if (companies.isEmpty && _invitations.isEmpty) ...[
+                          const EmptyState(
+                            title: 'Empieza con tu empresa',
+                            message:
+                                'Con el RUC y el régimen, Contabili prepara tu plan de cuentas '
+                                'y te muestra cuánto te toca pagar a SUNAT.',
+                          ),
+                          const SizedBox(height: 16),
                         ],
                         const SizedBox(height: 8),
                         companies.isEmpty
@@ -177,15 +187,17 @@ class _InvitationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: ContabiliColors.mint,
+      color: ContabiliColors.greenSoft,
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Icon(Icons.mail_outline_rounded, color: ContabiliColors.green, size: 30),
+            const SizedBox(height: 8),
             Text(
               '${invitation.invitedBy} te invitó a ${invitation.legalName}',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+              style: ContabiliFonts.title(20),
             ),
             const SizedBox(height: 4),
             Text('Como ${invitation.role.label.toLowerCase()}: ${invitation.role.hint}'),

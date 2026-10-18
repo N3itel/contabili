@@ -7,6 +7,7 @@ import '../core/money.dart';
 import '../core/operations.dart';
 import '../core/ruc.dart';
 import '../session/session.dart';
+import '../ui/brand.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
 
@@ -236,27 +237,49 @@ class _OperationScreenState extends State<OperationScreen> {
     final again = await showModalBottomSheet<bool>(
       context: context,
       isDismissible: false,
+      isScrollControlled: true,
       builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.check_circle, color: ContabiliColors.green, size: 56),
-              const SizedBox(height: 12),
+              Center(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.6, end: 1),
+                  duration: const Duration(milliseconds: 420),
+                  curve: Curves.easeOutBack,
+                  builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: const BoxDecoration(
+                      color: ContabiliColors.goldSoft,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const ContabiliMark(size: 72),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
               Text(
                 '¡Listo, quedó anotado!',
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                style: ContabiliFonts.title(26),
               ),
-              const SizedBox(height: 8),
-              Text(
-                explanation,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: ContabiliColors.line),
+                ),
+                child: Text(
+                  explanation,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
               ),
               const SizedBox(height: 20),
               FilledButton(
@@ -307,19 +330,50 @@ class _OperationScreenState extends State<OperationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: type.background,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: type.foreground.withValues(alpha: 0.16)),
+                    ),
+                    child: Row(
+                      children: [
+                        IconBox(
+                          icon: type.icon,
+                          color: type.foreground,
+                          background: Colors.white,
+                          size: 52,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                type.verb,
+                                style: ContabiliFonts.title(24, color: type.foreground),
+                              ),
+                              Text(
+                                type.hint,
+                                style: const TextStyle(color: ContabiliColors.ink2, fontSize: 15),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   TextField(
                     controller: _amount,
                     autofocus: true,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))],
-                    style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800),
+                    style: ContabiliFonts.amount(36),
                     decoration: InputDecoration(
                       prefixText: 'S/ ',
-                      prefixStyle: const TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800,
-                        color: ContabiliColors.ink,
-                      ),
+                      prefixStyle: ContabiliFonts.amount(36, color: ContabiliColors.ink2),
                       hintText: '0.00',
                       labelText: switch (type) {
                         OperationType.sale => '¿Cuánto vendiste?',

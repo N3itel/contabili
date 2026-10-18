@@ -4,6 +4,7 @@ import '../api/api.dart';
 import '../core/dates.dart';
 import '../core/money.dart';
 import '../session/session.dart';
+import '../ui/andean.dart';
 import '../ui/theme.dart';
 import '../ui/trend_chart.dart';
 import '../ui/widgets.dart';
@@ -18,11 +19,15 @@ class HomeScreen extends StatefulWidget {
     required this.session,
     required this.changes,
     required this.onOpenPlan,
+    this.showGreeting = true,
   });
 
   final SessionController session;
   final ValueNotifier<int> changes;
   final VoidCallback onOpenPlan;
+
+  /// En la computadora el saludo va en el encabezado de la página.
+  final bool showGreeting;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -94,61 +99,234 @@ class _HomeScreenState extends State<HomeScreen> {
     final license = _license;
     final expired = license?.status == LicenseStatus.expired;
     final canRecord = _company.role.canRecord && !expired;
+    final taxes = _taxes;
+    final hasTrend = _trend.any((p) => p.sales > 0 || p.expenses > 0);
+
+    final hero = _MoneyHero(
+      summary: summary,
+      greeting: widget.showGreeting ? widget.session.user?.firstName : null,
+    );
+    final record = <Widget>[
+      if (canRecord) ...[
+        const SectionTitle('¿Qué pasó hoy?'),
+        _ActionGrid(onTap: _record),
+      ] else if (!_company.role.canRecord)
+        const Notice(
+          text:
+              'Tu rol en esta empresa es solo de consulta: puedes ver todo, '
+              'pero no registrar.',
+        ),
+    ];
+    final figures = <Widget>[
+      SectionTitle('Tu negocio en ${monthName(summary.period)}'),
+      _SummaryTiles(summary: summary),
+      if (taxes != null) ...[
+        const SizedBox(height: 12),
+        _TaxesCard(taxes: taxes, onOpen: _openTaxes),
+      ],
+    ];
+    final trend = <Widget>[
+      if (hasTrend) ...[
+        const SectionTitle('Tus últimos meses'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+            child: TrendChart(points: _trend),
+          ),
+        ),
+      ],
+    ];
+
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          ReadableWidth(
-            maxWidth: 900,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (license != null) ...[
-                  _LicenseBanner(license: license, onOpenPlan: widget.onOpenPlan),
-                  const SizedBox(height: 12),
-                ],
-                if (canRecord) ...[
-                  Text('¿Qué pasó hoy?', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 10),
-                  _ActionGrid(onTap: _record),
-                  const SizedBox(height: 24),
-                ] else if (!_company.role.canRecord) ...[
-                  const Notice(
-                    text:
-                        'Tu rol en esta empresa es solo de consulta: puedes ver todo, '
-                        'pero no registrar.',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final twoColumns = constraints.maxWidth >= 900;
+          final banner = [
+            if (license != null) ...[
+              _LicenseBanner(license: license, onOpenPlan: widget.onOpenPlan),
+              const SizedBox(height: 16),
+            ],
+          ];
+          final content = twoColumns
+              ? [
+                  ...banner,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [hero, const SizedBox(height: 28), ...record],
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: figures,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                ],
-                Text(
-                  'Tu negocio en ${monthName(summary.period)}',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 10),
-                _SummaryCards(summary: summary),
-                if (_taxes case final taxes?) ...[
-                  const SizedBox(height: 14),
-                  _TaxesCard(taxes: taxes, onOpen: _openTaxes),
-                ],
-                if (_trend.any((p) => p.sales > 0 || p.expenses > 0)) ...[
-                  const SizedBox(height: 24),
-                  Text('Tus últimos meses', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 10),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
-                      child: TrendChart(points: _trend),
-                    ),
-                  ),
-                ],
-              ],
+                  if (hasTrend) const SizedBox(height: 28),
+                  ...trend,
+                ]
+              : [
+                  ...banner,
+                  hero,
+                  const SizedBox(height: 28),
+                  ...record,
+                  if (record.isNotEmpty) const SizedBox(height: 28),
+                  ...figures,
+                  if (hasTrend) const SizedBox(height: 28),
+                  ...trend,
+                ];
+          return ListView(
+            padding: EdgeInsets.fromLTRB(
+              twoColumns ? 32 : 16,
+              twoColumns ? 8 : 16,
+              twoColumns ? 32 : 16,
+              32,
             ),
+            children: [
+              ReadableWidth(
+                maxWidth: 1040,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: content),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// La plata disponible en grande, con caja, bancos y cómo va el mes.
+class _MoneyHero extends StatelessWidget {
+  const _MoneyHero({required this.summary, this.greeting});
+
+  final Summary summary;
+  final String? greeting;
+
+  @override
+  Widget build(BuildContext context) {
+    final result = summary.result;
+    const soft = TextStyle(color: Color(0xE6FFFFFF), fontSize: 16);
+    return HeroPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (greeting != null) ...[
+            Text('Hola, $greeting', style: ContabiliFonts.title(22, color: Colors.white)),
+            const SizedBox(height: 10),
+          ],
+          const Text('Plata disponible', style: soft),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatSoles(summary.money),
+              style: ContabiliFonts.amount(44, color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _Pill(icon: Icons.payments_outlined, text: 'Caja ${formatSoles(summary.cash)}'),
+              _Pill(
+                icon: Icons.account_balance_outlined,
+                text: 'Bancos ${formatSoles(summary.bank)}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Container(height: 1, color: const Color(0x33FFFFFF)),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0x26FFFFFF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  result >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                  color: ContabiliColors.goldLight,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      result >= 0 ? 'Este mes vas ganando' : 'Este mes vas perdiendo',
+                      style: soft,
+                    ),
+                    Text(
+                      formatSoles(result.abs()),
+                      style: ContabiliFonts.amount(
+                        28,
+                        color: result >= 0 ? ContabiliColors.goldLight : const Color(0xFFFFD3CC),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Vendiste ${formatSoles(summary.sales)} y gastaste '
+                      '${formatSoles(summary.expenses)} (sin IGV).',
+                      style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+    decoration: BoxDecoration(
+      color: const Color(0x26FFFFFF),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: const Color(0x33FFFFFF)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: Colors.white),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _LicenseBanner extends StatelessWidget {
@@ -230,35 +408,41 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: type.background,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(22),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(type.icon, size: 34, color: type.foreground),
-              const SizedBox(height: 18),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    type.verb,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: type.foreground,
-                    ),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: type.foreground.withValues(alpha: 0.16)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x141E2235), blurRadius: 8, offset: Offset(0, 3)),
+                    ],
                   ),
-                  Text(
-                    type.hint,
-                    style: const TextStyle(color: ContabiliColors.ink2, fontSize: 14),
-                  ),
-                ],
-              ),
-            ],
+                  child: Icon(type.icon, size: 28, color: type.foreground),
+                ),
+                const SizedBox(height: 16),
+                Text(type.verb, style: ContabiliFonts.title(25, color: type.foreground)),
+                const SizedBox(height: 2),
+                Text(
+                  type.hint,
+                  style: const TextStyle(color: ContabiliColors.ink2, fontSize: 14, height: 1.35),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -266,115 +450,47 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _SummaryCards extends StatelessWidget {
-  const _SummaryCards({required this.summary});
+/// Te deben, debes e IGV del mes.
+class _SummaryTiles extends StatelessWidget {
+  const _SummaryTiles({required this.summary});
 
   final Summary summary;
 
   @override
   Widget build(BuildContext context) {
-    final result = summary.result;
     final igv = summary.igvMonth;
-    final wide = MediaQuery.sizeOf(context).width >= 700;
-    final cards = [
-      _Figure(
-        label: 'Plata disponible',
-        amount: summary.money,
-        detail: 'Caja ${formatSoles(summary.cash)} · Bancos ${formatSoles(summary.bank)}',
-        big: true,
-      ),
-      _Figure(
-        label: result >= 0 ? 'Este mes vas ganando' : 'Este mes vas perdiendo',
-        amount: result.abs(),
-        color: result >= 0 ? ContabiliColors.green : ContabiliColors.red,
-        detail:
-            'Vendiste ${formatSoles(summary.sales)} y gastaste ${formatSoles(summary.expenses)} '
-            '(sin IGV).',
-        big: true,
-      ),
-      _Figure(
-        label: 'Te deben',
-        amount: summary.receivable,
-        detail: 'Ventas al crédito que falta cobrar.',
-      ),
-      _Figure(
-        label: 'Debes',
-        amount: summary.payable,
-        detail: 'Compras al crédito que falta pagar.',
-      ),
-      _Figure(
-        label: igv >= 0 ? 'IGV de este mes' : 'IGV a tu favor',
-        amount: igv.abs(),
-        detail: igv >= 0
-            ? 'Lo que te toca pagar a SUNAT por tus ventas, menos lo de tus facturas.'
-            : 'Pagaste más IGV en tus compras del que cobraste: queda para el próximo mes.',
-      ),
-    ];
-    if (!wide) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final card in cards) ...[card, const SizedBox(height: 10)],
-        ],
-      );
-    }
-    // En pantallas anchas: plata y resultado arriba (dos columnas), el resto en tres.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final half = (constraints.maxWidth - 10) / 2;
-        final third = (constraints.maxWidth - 20) / 3;
-        return Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final (i, card) in cards.indexed)
-              SizedBox(width: i < 2 ? half : third, child: card),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _Figure extends StatelessWidget {
-  const _Figure({
-    required this.label,
-    required this.amount,
-    required this.detail,
-    this.color = ContabiliColors.ink,
-    this.big = false,
-  });
-
-  final String label;
-  final Cents amount;
-  final String detail;
-  final Color color;
-  final bool big;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 16, color: ContabiliColors.ink2)),
-            const SizedBox(height: 4),
-            Text(
-              formatSoles(amount),
-              style: TextStyle(
-                fontSize: big ? 34 : 26,
-                fontWeight: FontWeight.w800,
-                color: color,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(detail, style: const TextStyle(fontSize: 14, color: ContabiliColors.ink2)),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        StatTile(
+          icon: Icons.call_received_rounded,
+          iconColor: ContabiliColors.green,
+          iconBackground: ContabiliColors.greenSoft,
+          label: 'Te deben',
+          amount: summary.receivable,
+          detail: 'Ventas al crédito que falta cobrar.',
         ),
-      ),
+        const SizedBox(height: 10),
+        StatTile(
+          icon: Icons.call_made_rounded,
+          iconColor: ContabiliColors.red,
+          iconBackground: ContabiliColors.redSoft,
+          label: 'Debes',
+          amount: summary.payable,
+          detail: 'Compras al crédito que falta pagar.',
+        ),
+        const SizedBox(height: 10),
+        StatTile(
+          icon: Icons.percent_rounded,
+          iconColor: ContabiliColors.indigo,
+          iconBackground: ContabiliColors.indigoSoft,
+          label: igv >= 0 ? 'IGV de este mes' : 'IGV a tu favor',
+          amount: igv.abs(),
+          detail: igv >= 0
+              ? 'Lo de tus ventas, menos lo de tus facturas de compra.'
+              : 'Pagaste más IGV en tus compras del que cobraste: queda para el próximo mes.',
+        ),
+      ],
     );
   }
 }
@@ -388,42 +504,51 @@ class _TaxesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: ContabiliColors.goldSoft,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(
-            children: [
-              const Icon(Icons.account_balance_outlined, size: 34, color: ContabiliColors.amber),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Impuestos de ${monthName(taxes.period)}',
-                      style: const TextStyle(fontSize: 16, color: ContabiliColors.ink2),
-                    ),
-                    Text(
-                      formatSoles(taxes.total),
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const Text(
-                      'Lo que va del mes para SUNAT. Toca para ver el detalle.',
-                      style: TextStyle(fontSize: 14, color: ContabiliColors.ink2),
-                    ),
-                  ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [ContabiliColors.goldSoft, Color(0xFFF7E2B2)],
+        ),
+        border: Border.all(color: ContabiliColors.gold.withValues(alpha: 0.35)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                const IconBox(
+                  icon: Icons.account_balance_rounded,
+                  color: ContabiliColors.amber,
+                  background: Colors.white,
                 ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Impuestos de ${monthName(taxes.period)}',
+                        style: const TextStyle(fontSize: 15, color: ContabiliColors.ink2),
+                      ),
+                      Text(formatSoles(taxes.total), style: ContabiliFonts.amount(28)),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Lo que va del mes para SUNAT. Toca para ver el detalle.',
+                        style: TextStyle(fontSize: 14, color: ContabiliColors.ink2),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: ContabiliColors.amber),
+              ],
+            ),
           ),
         ),
       ),
