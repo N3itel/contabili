@@ -204,6 +204,31 @@ void main() {
     await tester.tap(find.byTooltip('Atrás'));
     await _settle(tester);
 
+    // Facturación electrónica en modo de prueba, con otra serie (B001-1 ya se anotó a mano).
+    await _tap(tester, 'Más');
+    await _tap(tester, 'Facturación electrónica (beta)');
+    await _waitFor(tester, find.text('¿Cómo quieres emitir?'));
+    await tester.enterText(find.widgetWithText(TextField, 'Serie de boletas'), 'B002');
+    await _tap(tester, 'Guardar');
+    await _waitFor(tester, find.text('Modo de prueba'));
+    await _tap(tester, 'Emitir boleta o factura');
+    await tester.enterText(find.widgetWithText(TextField, 'Total, con IGV'), '59');
+    await tester.enterText(find.widgetWithText(TextField, '¿Qué vendiste?'), 'Abarrotes varios');
+    await tester.pump();
+    await _shot(tester, '10a-emitir');
+    final emit = find.widgetWithText(FilledButton, 'Emitir boleta');
+    await tester.ensureVisible(emit);
+    await tester.tap(emit);
+    await _waitFor(tester, find.text('¡Listo! (de prueba)'));
+    expect(find.text('Boleta B002-00000001 por S/ 59.00'), findsOneWidget);
+    expect(find.text('La venta quedó anotada y en tu registro de ventas.'), findsOneWidget);
+    await _shot(tester, '10b-emitida');
+    await _tap(tester, 'Listo');
+    await _waitFor(tester, find.text('Boleta B002-00000001'));
+    await _shot(tester, '10c-facturacion');
+    await tester.tap(find.byTooltip('Atrás'));
+    await _settle(tester);
+
     await _tap(tester, 'Mi plan');
     await _waitFor(tester, find.text('Prueba gratis del plan Negocio'));
     expect(find.text('Pagar S/ 490.00'), findsOneWidget);

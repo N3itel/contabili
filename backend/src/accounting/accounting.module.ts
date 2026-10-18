@@ -30,6 +30,6 @@ import { ReportsService } from './reports.service.js';
     ExportsService,
     RegistersService,
   ],
-  exports: [JournalService],
+  exports: [JournalService, OperationsService, ExportsService],
 })
 export class AccountingModule {}

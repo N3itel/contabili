@@ -15,7 +15,7 @@ type Agent = ReturnType<typeof request>;
 export interface TestApp {
   app: INestApplication;
   /** La API: `t.http.get('/companies')` pide /api/v1/companies. */
-  http: Pick<Agent, 'get' | 'post' | 'patch' | 'delete'>;
+  http: Pick<Agent, 'get' | 'post' | 'put' | 'patch' | 'delete'>;
   /** Las páginas del sitio, sin prefijo. */
   web: Agent;
   sms: MemorySmsSender;
@@ -39,6 +39,7 @@ export async function createTestApp(): Promise<TestApp> {
     http: {
       get: (path: string) => web.get(api(path)),
       post: (path: string) => web.post(api(path)),
+      put: (path: string) => web.put(api(path)),
       patch: (path: string) => web.patch(api(path)),
       delete: (path: string) => web.delete(api(path)),
     },

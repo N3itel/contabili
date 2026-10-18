@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../session/session.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
+import 'einvoicing_screen.dart';
 import 'registers_screen.dart';
 import 'taxes_screen.dart';
 import 'team_screen.dart';
@@ -65,6 +66,19 @@ class MoreScreen extends StatelessWidget {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => TaxesScreen(session: session, changes: changes),
+                        ),
+                      ),
+                    ),
+                    const Divider(indent: 76),
+                    _MoreTile(
+                      icon: Icons.receipt_long_outlined,
+                      color: ContabiliColors.green,
+                      background: ContabiliColors.greenSoft,
+                      title: 'Facturación electrónica (beta)',
+                      subtitle: 'Emite boletas y facturas',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => EinvoicingScreen(session: session, changes: changes),
                         ),
                       ),
                     ),

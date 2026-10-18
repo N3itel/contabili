@@ -643,3 +643,184 @@ class Register {
   final Cents igv;
   final Cents total;
 }
+
+/// Facturación electrónica (beta) de la empresa.
+class EinvoiceSettings {
+  const EinvoiceSettings({
+    required this.enabled,
+    this.provider = 'test',
+    this.facturaSeries = 'F001',
+    this.boletaSeries = 'B001',
+    this.endpointHost,
+    this.hasToken = false,
+  });
+
+  factory EinvoiceSettings.fromJson(Json json) => json['enabled'] == true
+      ? EinvoiceSettings(
+          enabled: true,
+          provider: json['provider'] as String,
+          facturaSeries: json['facturaSeries'] as String,
+          boletaSeries: json['boletaSeries'] as String,
+          endpointHost: json['endpointHost'] as String?,
+          hasToken: json['hasToken'] as bool,
+        )
+      : const EinvoiceSettings(enabled: false);
+
+  final bool enabled;
+
+  /// `test` (modo de prueba) o `nubefact`.
+  final String provider;
+  final String facturaSeries;
+  final String boletaSeries;
+  final String? endpointHost;
+  final bool hasToken;
+
+  bool get isTest => provider == 'test';
+}
+
+enum EinvoiceType {
+  boleta('03', 'Boleta'),
+  factura('01', 'Factura');
+
+  const EinvoiceType(this.wire, this.label);
+  final String wire;
+  final String label;
+
+  static EinvoiceType fromWire(String wire) => wire == '01' ? factura : boleta;
+}
+
+enum CustomerDoc {
+  none('none', 'Sin documento'),
+  dni('dni', 'DNI'),
+  ruc('ruc', 'RUC');
+
+  const CustomerDoc(this.wire, this.label);
+  final String wire;
+  final String label;
+
+  static CustomerDoc fromWire(String wire) => values.firstWhere((d) => d.wire == wire);
+}
+
+/// Estado de un comprobante electrónico.
+enum EinvoiceStatus {
+  accepted('accepted', 'Aceptado por SUNAT'),
+  pending('pending', 'Esperando a SUNAT'),
+  rejected('rejected', 'Rechazado'),
+  test('test', 'De prueba');
+
+  const EinvoiceStatus(this.wire, this.label);
+  final String wire;
+  final String label;
+
+  static EinvoiceStatus fromWire(String wire) => values.firstWhere((s) => s.wire == wire);
+}
+
+class Einvoice {
+  const Einvoice({
+    required this.id,
+    required this.type,
+    required this.label,
+    required this.issueDate,
+    required this.status,
+    required this.statusMessage,
+    required this.customerDoc,
+    required this.customerNumber,
+    required this.customerName,
+    required this.description,
+    required this.base,
+    required this.igv,
+    required this.total,
+    required this.recorded,
+  });
+
+  factory Einvoice.fromJson(Json json) {
+    final customer = json['customer'] as Json;
+    return Einvoice(
+      id: json['id'] as String,
+      type: EinvoiceType.fromWire(json['type'] as String),
+      label: json['label'] as String,
+      issueDate: json['issueDate'] as String,
+      status: EinvoiceStatus.fromWire(json['status'] as String),
+      statusMessage: json['statusMessage'] as String?,
+      customerDoc: CustomerDoc.fromWire(customer['docType'] as String),
+      customerNumber: customer['number'] as String?,
+      customerName: customer['name'] as String?,
+      description: json['description'] as String,
+      base: json['base'] as int,
+      igv: json['igv'] as int,
+      total: json['total'] as int,
+      recorded: json['recorded'] as bool,
+    );
+  }
+
+  final String id;
+  final EinvoiceType type;
+
+  /// «B001-00000045».
+  final String label;
+  final String issueDate;
+  final EinvoiceStatus status;
+  final String? statusMessage;
+  final CustomerDoc customerDoc;
+  final String? customerNumber;
+  final String? customerName;
+  final String description;
+  final Cents base;
+  final Cents igv;
+  final Cents total;
+
+  /// La venta ya está anotada en los libros.
+  final bool recorded;
+
+  bool get canRecord =>
+      !recorded && (status == EinvoiceStatus.accepted || status == EinvoiceStatus.test);
+}
+
+/// Lo que devuelve emitir: el comprobante y, si no se pudo anotar la venta, por qué.
+class EinvoiceResult {
+  const EinvoiceResult(this.einvoice, this.recordError);
+
+  factory EinvoiceResult.fromJson(Json json) =>
+      EinvoiceResult(Einvoice.fromJson(json['einvoice'] as Json), json['recordError'] as String?);
+
+  final Einvoice einvoice;
+  final String? recordError;
+}
+
+class EmitRequest {
+  const EmitRequest({
+    required this.type,
+    required this.saleKind,
+    required this.paidWith,
+    required this.customerDoc,
+    required this.description,
+    required this.total,
+    this.customerNumber,
+    this.customerName,
+    this.contactId,
+  });
+
+  final EinvoiceType type;
+  final SaleKind saleKind;
+  final Settlement paidWith;
+  final CustomerDoc customerDoc;
+  final String? customerNumber;
+  final String? customerName;
+  final String description;
+  final Cents total;
+  final String? contactId;
+
+  Map<String, Object> toJson() => {
+    'type': type.wire,
+    'saleKind': saleKind.wire,
+    'paidWith': paidWith.wire,
+    'contactId': ?contactId,
+    'customer': {
+      'docType': customerDoc.wire,
+      if (customerDoc != CustomerDoc.none) 'number': ?customerNumber,
+      if (customerDoc != CustomerDoc.none) 'name': ?customerName,
+    },
+    'description': description,
+    'total': total,
+  };
+}

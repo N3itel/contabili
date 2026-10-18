@@ -61,6 +61,15 @@ Guía para quien programe en este repositorio (personas o Claude).
 - Nunca registres el cuerpo de las respuestas de Culqi. Sin llaves se usa el proveedor de prueba; en producción, llaves `live`.
 - Avisos de vencimiento (`billing/reminder-rules.ts`, `RemindersService`, cada hora): SMS a los dueños (hasta 3) 3 días antes de que termine la prueba o el plan y otro al vencer (hasta 7 días después), solo de 9 a. m. a 8 p. m. de Lima. Una vez por empresa, tipo y fecha de vencimiento (índice único `license_reminders_once_uq`, reservado antes de mandar): pagar mueve la fecha y el ciclo vuelve a empezar. El texto va sin tildes (GSM-7, una sola parte de 160); el del código por SMS lleva tilde y por eso cabe en 70. Su costo está en `COSTS.reminderSmsPerCycle`.
 
+## Facturación electrónica (beta)
+
+- Boletas (03) y facturas (01) electrónicas desde Contabili (`einvoicing/`). Cada empresa elige en Más → Facturación electrónica: **modo de prueba** (no manda nada a SUNAT; el PDF lleva la marca «PRUEBA · SIN VALOR TRIBUTARIO») o **su propia cuenta de Nubefact** (PSE autorizado: ruta y token). Solo el dueño configura (`audit()`); el token se guarda cifrado con `FieldCipher` (AES-256-GCM, llave derivada de `AUTH_JWT_SECRET`) y nunca vuelve a la app.
+- Solo se llama a rutas `https://*.nubefact.com` o `api.pse.pe` (`isAllowedEndpoint`): el servidor no hace peticiones a direcciones que alguien escriba. Nunca registres el cuerpo de las respuestas del proveedor.
+- Reglas (`einvoice-rules.ts` y la pantalla de emitir): no en el Nuevo RUS (por ahora), factura con RUC válido, boleta de más de S/ 700 con nombre y DNI o RUC, series F### y B###, descripción de 3 a 250 letras. La base lo exige otra vez (checks en `einvoices`).
+- Emitir: se reserva el número correlativo bloqueando la configuración (`einvoices_number_uq`), se manda al proveedor y, si salió (o es de prueba), se anota la venta con su comprobante (queda en el registro de ventas). Si el proveedor no lo creó, el número se libera; si no se sabe (se cortó la conexión), queda `pending` y se consulta después: nunca se repite un número. Si SUNAT lo rechaza, el número se usó y la venta no se anota.
+- Si el comprobante salió pero la venta no se pudo anotar (por ejemplo, ese número ya estaba anotado a mano), queda el comprobante y se reintenta con «Anotar la venta».
+- El PDF de prueba lo genera Contabili (`pdf/einvoice-pdf.ts`, con el monto en letras) por un enlace firmado de 5 minutos; con Nubefact, el PDF es el suyo.
+
 ## Sitio público
 
 - Lo sirve el backend fuera de `/api/v1` (`web/`, lista en `main-prefix.ts`): páginas fijas con CSP por hash, sin cookies ni recursos externos (salvo Culqi en `/pagar`). Nada de atributos `style=""`: la CSP los bloquea; usa clases (una prueba lo revisa).

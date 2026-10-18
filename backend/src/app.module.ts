@@ -8,6 +8,7 @@ import { SafeExceptionFilter } from './common/exception.filter.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { validateEnv } from './config/env.js';
 import { DbModule } from './db/db.module.js';
+import { EinvoicingModule } from './einvoicing/einvoicing.module.js';
 import { HealthController } from './health/health.controller.js';
 import { UsersModule } from './users/users.module.js';
 import { WebModule } from './web/web.module.js';
@@ -21,6 +22,7 @@ import { WebModule } from './web/web.module.js';
     CompaniesModule,
     AccountingModule,
     BillingModule,
+    EinvoicingModule,
     WebModule,
   ],
   controllers: [HealthController],

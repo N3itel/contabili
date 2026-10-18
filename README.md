@@ -27,6 +27,9 @@ de prueba se compilan desde GitHub Actions.
   - **Comprobantes y registros**: cada venta o gasto puede llevar su boleta,
     factura, recibo por honorarios o ticket; con ellos salen el registro de
     ventas y el de compras del mes, sin duplicados.
+  - **Facturación electrónica (beta)**: boletas y facturas en modo de prueba o
+    con la cuenta de Nubefact de cada empresa; la venta se anota sola.
+  - **Avisos por SMS** a los dueños antes de que venza la prueba o el plan.
   - **Descargas en Excel y PDF**: libro diario, balance de comprobación y
     registros de ventas y compras, y el **reporte del mes** en PDF con la marca,
     con enlaces firmados que vencen en 5 minutos.
@@ -84,6 +87,9 @@ descargas con enlace firmado (`/exports/:token`). Los montos van en céntimos (S
 | `GET /companies/:id/periods`, `POST …/periods/close` · `/reopen` | consulta · contador · dueño | Cierre mensual (reabrir pide motivo) |
 | `GET /companies/:id/billing` | consulta | Plan, días que quedan y pagos |
 | `POST /companies/:id/billing/orders` | dueño | Orden de pago: devuelve `checkoutUrl` |
+| `GET` · `PUT /companies/:id/einvoicing` | consulta · dueño | Facturación electrónica: modo de prueba o Nubefact y series |
+| `GET` · `POST /companies/:id/einvoices` | consulta · contador | Comprobantes emitidos y emitir una boleta o factura |
+| `POST /companies/:id/einvoices/:id/refresh` · `/record` · `/link` | contador · contador · consulta | Consultar a SUNAT, anotar la venta y ver el PDF |
 | `GET /app/config` | — | Planes, descargas y versión de los términos para las apps |
 | `GET /exports/:token` | — (enlace firmado) | La descarga en sí |
 
@@ -99,9 +105,9 @@ Sin `from`/`to`, los reportes van del 1 de enero hasta hoy (hora de Lima).
 3. ~~Cierre mensual, operaciones fáciles, resumen, licencias, cobro y sitio.~~
 4. ~~App Flutter para Android, iOS, Windows, macOS y Linux.~~ Falta: instaladores
    firmados (MSIX, DMG notarizado, .deb, Play y App Store) y publicarlos en `/descargas`.
-5. Avisos antes de que venza el plan; comprobante electrónico de cada pago de licencia.
+5. ~~Avisos antes de que venza el plan.~~ Comprobante electrónico de cada pago de licencia.
 6. ~~Registro de ventas y de compras desde comprobantes; exportar a PDF.~~
-7. Facturación electrónica (OSE/PSE) y libros electrónicos PLE.
+7. ~~Facturación electrónica (beta, con Nubefact).~~ Notas de crédito, Nuevo RUS y libros electrónicos PLE.
 
 ## Desarrollo
 

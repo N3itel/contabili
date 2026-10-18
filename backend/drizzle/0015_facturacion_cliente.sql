@@ -1,0 +1,1 @@
+ALTER TABLE "einvoices" ADD CONSTRAINT "einvoices_contact_fk" FOREIGN KEY ("contact_id","company_id") REFERENCES "public"."contacts"("id","company_id") ON DELETE no action ON UPDATE no action;

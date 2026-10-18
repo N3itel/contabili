@@ -65,6 +65,24 @@ abstract interface class ContabiliApi {
     ExportFormat format = ExportFormat.csv,
   });
 
+  // Facturación electrónica (beta).
+  Future<EinvoiceSettings> einvoiceSettings(String companyId);
+  Future<EinvoiceSettings> saveEinvoiceSettings(
+    String companyId, {
+    required String provider,
+    required String facturaSeries,
+    required String boletaSeries,
+    String? endpoint,
+    String? token,
+  });
+  Future<List<Einvoice>> einvoices(String companyId, {required String period});
+  Future<EinvoiceResult> emitEinvoice(String companyId, EmitRequest request);
+  Future<EinvoiceResult> refreshEinvoice(String companyId, String einvoiceId);
+  Future<EinvoiceResult> recordEinvoice(String companyId, String einvoiceId);
+
+  /// Dónde ver el PDF del comprobante.
+  Future<Uri> einvoiceLink(String companyId, String einvoiceId);
+
   /// Crea la orden de pago y devuelve la dirección de la página de pago.
   Future<Uri> createOrder(String companyId, {required String plan, required BillingCycle cycle});
 

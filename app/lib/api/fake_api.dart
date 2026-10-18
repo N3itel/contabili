@@ -370,6 +370,106 @@ class FakeContabiliApi implements ContabiliApi {
 
   final List<String> closedPeriods = [];
 
+  // ─── Facturación electrónica (beta), siempre en modo de prueba ──────────
+
+  EinvoiceSettings einvoicing = const EinvoiceSettings(enabled: false);
+  final List<Einvoice> issued = [];
+
+  @override
+  Future<EinvoiceSettings> einvoiceSettings(String companyId) async {
+    _check();
+    return einvoicing;
+  }
+
+  @override
+  Future<EinvoiceSettings> saveEinvoiceSettings(
+    String companyId, {
+    required String provider,
+    required String facturaSeries,
+    required String boletaSeries,
+    String? endpoint,
+    String? token,
+  }) async {
+    _check();
+    return einvoicing = EinvoiceSettings(
+      enabled: true,
+      provider: provider,
+      facturaSeries: facturaSeries.toUpperCase(),
+      boletaSeries: boletaSeries.toUpperCase(),
+      endpointHost: endpoint == null ? null : Uri.parse(endpoint).host,
+      hasToken: token != null,
+    );
+  }
+
+  @override
+  Future<List<Einvoice>> einvoices(String companyId, {required String period}) async {
+    _check();
+    return issued.reversed.toList();
+  }
+
+  @override
+  Future<EinvoiceResult> emitEinvoice(String companyId, EmitRequest request) async {
+    _check();
+    if (!einvoicing.enabled) {
+      throw const ApiException(
+        status: 409,
+        code: 'einvoice_not_configured',
+        message: 'Primero configura la facturación electrónica.',
+      );
+    }
+    final series = request.type == EinvoiceType.factura
+        ? einvoicing.facturaSeries
+        : einvoicing.boletaSeries;
+    final number = issued.where((e) => e.label.startsWith(series)).length + 1;
+    final company = _companies.firstWhere((c) => c.id == companyId);
+    final split = operationIgv(
+      Sale(request.total, kind: request.saleKind, paidWith: request.paidWith),
+      company.taxRegime,
+    );
+    await recordOperation(
+      companyId,
+      Sale(request.total, kind: request.saleKind, paidWith: request.paidWith),
+      contactId: request.contactId,
+      document: OperationDocument(
+        type: request.type == EinvoiceType.factura ? DocType.factura : DocType.boleta,
+        series: series,
+        number: number,
+        counterpartyRuc: request.customerDoc == CustomerDoc.ruc ? request.customerNumber : null,
+        counterpartyName: request.customerName,
+      ),
+    );
+    final einvoice = Einvoice(
+      id: _uuid(),
+      type: request.type,
+      label: '$series-${number.toString().padLeft(8, '0')}',
+      issueDate: '$period-17',
+      status: EinvoiceStatus.test,
+      statusMessage: 'Comprobante de prueba: no se envió a SUNAT.',
+      customerDoc: request.customerDoc,
+      customerNumber: request.customerNumber,
+      customerName: request.customerName,
+      description: request.description,
+      base: split.base,
+      igv: split.igv,
+      total: request.total,
+      recorded: true,
+    );
+    issued.add(einvoice);
+    return EinvoiceResult(einvoice, null);
+  }
+
+  @override
+  Future<EinvoiceResult> refreshEinvoice(String companyId, String einvoiceId) async =>
+      EinvoiceResult(issued.firstWhere((e) => e.id == einvoiceId), null);
+
+  @override
+  Future<EinvoiceResult> recordEinvoice(String companyId, String einvoiceId) async =>
+      EinvoiceResult(issued.firstWhere((e) => e.id == einvoiceId), null);
+
+  @override
+  Future<Uri> einvoiceLink(String companyId, String einvoiceId) async =>
+      Uri.parse('https://contabili.pe/api/v1/exports/comprobante-de-prueba');
+
   /// Comprobantes registrados: asiento, operación, comprobante e IGV.
   final List<(JournalEntry, Operation, OperationDocument, int)> documents = [];
 

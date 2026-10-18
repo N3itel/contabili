@@ -8,6 +8,7 @@ import '../ui/andean.dart';
 import '../ui/theme.dart';
 import '../ui/trend_chart.dart';
 import '../ui/widgets.dart';
+import 'einvoicing_screen.dart';
 import 'operation_screen.dart';
 import 'taxes_screen.dart';
 
@@ -38,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   License? _license;
   MonthlyTaxes? _taxes;
   List<TrendPoint> _trend = const [];
+  EinvoiceSettings _einvoicing = const EinvoiceSettings(enabled: false);
   Object? _error;
 
   Company get _company => widget.session.company!;
@@ -64,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
         api.billing(_company.id),
         api.taxes(_company.id),
         api.trend(_company.id),
+        api.einvoiceSettings(_company.id),
       ]);
       if (!mounted) return;
       setState(() {
@@ -71,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _license = (results[1] as Billing).license;
         _taxes = results[2] as MonthlyTaxes;
         _trend = results[3] as List<TrendPoint>;
+        _einvoicing = results[4] as EinvoiceSettings;
       });
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error);
@@ -84,6 +88,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (saved == true) widget.changes.value++;
+  }
+
+  Future<void> _emitEinvoice() async {
+    final emitted = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => EmitScreen(session: widget.session)));
+    if (emitted == true) widget.changes.value++;
   }
 
   /// El reporte del mes en PDF, para guardarlo, imprimirlo o mandarlo al contador.
@@ -137,6 +148,20 @@ class _HomeScreenState extends State<HomeScreen> {
       if (canRecord) ...[
         const SectionTitle('¿Qué pasó hoy?'),
         _ActionGrid(onTap: _record),
+        if (_einvoicing.enabled) ...[
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: ContabiliColors.green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: _emitEinvoice,
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: Text(
+              _einvoicing.isTest ? 'Emitir boleta o factura (prueba)' : 'Emitir boleta o factura',
+            ),
+          ),
+        ],
       ] else if (!_company.role.canRecord)
         const Notice(
           text:

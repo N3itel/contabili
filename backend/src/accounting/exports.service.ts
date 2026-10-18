@@ -7,10 +7,19 @@ import { apiError } from '../common/http.js';
 import { CompanyAccess } from '../companies/company-access.js';
 import type { Env } from '../config/env.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
-import { accounts, companies, contacts, journalEntries, journalLines } from '../db/schema/index.js';
+import {
+  accounts,
+  companies,
+  contacts,
+  einvoices,
+  journalEntries,
+  journalLines,
+} from '../db/schema/index.js';
 import { CSV_BOM, csvAmount, csvRow, csvText } from './csv.js';
 import { formatDate, limaDate } from './lima.js';
+import { einvoicePdf } from '../pdf/einvoice-pdf.js';
 import { journalPdf, monthlyReportPdf, registerPdf, trialBalancePdf } from '../pdf/reports.js';
+import type { CustomerDocType, EinvoiceType } from '../einvoicing/einvoice-rules.js';
 import { RegistersService } from './registers.service.js';
 import { ReportsService } from './reports.service.js';
 
@@ -44,6 +53,14 @@ interface ExportClaims {
   format: ExportFormat;
   from: string;
   to: string;
+}
+
+/** Enlace a la representación impresa de un comprobante electrónico. */
+interface EinvoiceClaims {
+  userId: string;
+  companyId: string;
+  kind: 'einvoice';
+  einvoiceId: string;
 }
 
 export interface ExportFile {
@@ -113,6 +130,19 @@ export class ExportsService {
   }
 
   /** Archivo del enlace: nombre, tipo y contenido (CSV o PDF). */
+  /** Enlace corto al PDF de un comprobante electrónico (la empresa ya se revisó). */
+  async einvoiceLink(companyId: string, actorId: string, einvoiceId: string): Promise<string> {
+    await this.access.require(companyId, actorId, 'viewer');
+    const token = await new SignJWT({ cid: companyId, k: 'einvoice', e: einvoiceId })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(actorId)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime(`${EXPORT_TTL_SECONDS}s`)
+      .sign(this.key);
+    return `${this.publicUrl}/api/v1/exports/${token}`;
+  }
+
   async download(token: string): Promise<ExportFile> {
     const claims = await this.verify(token);
     // Sacar a alguien de la empresa corta también sus enlaces aún vigentes.
@@ -121,6 +151,7 @@ export class ExportsService {
       .select({ ruc: companies.ruc, legalName: companies.legalName })
       .from(companies)
       .where(eq(companies.id, claims.companyId));
+    if (claims.kind === 'einvoice') return this.einvoiceFile(claims, company);
     const range =
       claims.kind === 'monthly_report' ? claims.from.slice(0, 7) : `${claims.from}-al-${claims.to}`;
     const name = {
@@ -189,13 +220,55 @@ export class ExportsService {
     }
   }
 
-  private async verify(token: string): Promise<ExportClaims> {
+  private async einvoiceFile(
+    claims: EinvoiceClaims,
+    company: { ruc: string; legalName: string },
+  ): Promise<ExportFile> {
+    const [row] = await this.db
+      .select()
+      .from(einvoices)
+      .where(and(eq(einvoices.id, claims.einvoiceId), eq(einvoices.companyId, claims.companyId)));
+    if (!row) throw linkExpired();
+    const label = `${row.series}-${String(row.number).padStart(8, '0')}`;
+    return {
+      filename: `${row.docType === '01' ? 'factura' : 'boleta'}-${company.ruc}-${label}.pdf`,
+      contentType: 'application/pdf',
+      body: await einvoicePdf({
+        company,
+        type: row.docType as EinvoiceType,
+        series: row.series,
+        number: row.number,
+        issueDate: row.issueDate,
+        customer: {
+          docType: row.customerDocType as CustomerDocType,
+          number: row.customerDocNumber,
+          name: row.customerName,
+        },
+        description: row.description,
+        base: row.baseCents,
+        igv: row.igvCents,
+        total: row.totalCents,
+        test: row.provider === 'test',
+        hash: row.hash,
+      }),
+    };
+  }
+
+  private async verify(token: string): Promise<ExportClaims | EinvoiceClaims> {
     try {
       const { payload } = await jwtVerify(token, this.key, {
         audience: AUDIENCE,
         algorithms: ['HS256'],
       });
-      const { sub, cid, k, fm, f, t } = payload as Record<string, unknown>;
+      const { sub, cid, k, fm, f, t, e } = payload as Record<string, unknown>;
+      if (
+        k === 'einvoice' &&
+        typeof sub === 'string' &&
+        typeof cid === 'string' &&
+        typeof e === 'string'
+      ) {
+        return { userId: sub, companyId: cid, kind: 'einvoice', einvoiceId: e };
+      }
       if (
         typeof sub !== 'string' ||
         typeof cid !== 'string' ||

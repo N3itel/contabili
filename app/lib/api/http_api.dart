@@ -216,6 +216,61 @@ class HttpContabiliApi implements ContabiliApi {
   ];
 
   @override
+  Future<EinvoiceSettings> einvoiceSettings(String companyId) async =>
+      EinvoiceSettings.fromJson(await _json('GET', '${_company(companyId)}/einvoicing'));
+
+  @override
+  Future<EinvoiceSettings> saveEinvoiceSettings(
+    String companyId, {
+    required String provider,
+    required String facturaSeries,
+    required String boletaSeries,
+    String? endpoint,
+    String? token,
+  }) async => EinvoiceSettings.fromJson(
+    await _json(
+      'PUT',
+      '${_company(companyId)}/einvoicing',
+      body: {
+        'provider': provider,
+        'facturaSeries': facturaSeries,
+        'boletaSeries': boletaSeries,
+        'endpoint': ?endpoint,
+        'token': ?token,
+      },
+    ),
+  );
+
+  @override
+  Future<List<Einvoice>> einvoices(String companyId, {required String period}) async => [
+    for (final e in await _list('GET', '${_company(companyId)}/einvoices?period=$period'))
+      Einvoice.fromJson(e as Json),
+  ];
+
+  @override
+  Future<EinvoiceResult> emitEinvoice(String companyId, EmitRequest request) async =>
+      EinvoiceResult.fromJson(
+        await _json('POST', '${_company(companyId)}/einvoices', body: request.toJson()),
+      );
+
+  @override
+  Future<EinvoiceResult> refreshEinvoice(String companyId, String einvoiceId) async =>
+      EinvoiceResult.fromJson(
+        await _json('POST', '${_company(companyId)}/einvoices/$einvoiceId/refresh'),
+      );
+
+  @override
+  Future<EinvoiceResult> recordEinvoice(String companyId, String einvoiceId) async =>
+      EinvoiceResult.fromJson(
+        await _json('POST', '${_company(companyId)}/einvoices/$einvoiceId/record'),
+      );
+
+  @override
+  Future<Uri> einvoiceLink(String companyId, String einvoiceId) async => Uri.parse(
+    (await _json('POST', '${_company(companyId)}/einvoices/$einvoiceId/link'))['url'] as String,
+  );
+
+  @override
   Future<Register> documentRegister(
     String companyId,
     RegisterKind kind, {

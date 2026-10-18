@@ -42,6 +42,7 @@ export class ReportPdf {
   private readonly chunks: Buffer[] = [];
   private readonly done: Promise<Buffer>;
   private readonly generatedAt: Date;
+  private watermarkText: string | null = null;
 
   constructor(private readonly header: ReportHeader) {
     this.generatedAt = header.generatedAt ?? new Date();
@@ -304,6 +305,12 @@ export class ReportPdf {
     return this;
   }
 
+  /** Texto grande y tenue cruzado en cada hoja (por ejemplo, «PRUEBA»). */
+  watermark(text: string): this {
+    this.watermarkText = text;
+    return this;
+  }
+
   /** Cierra el documento: pie con fecha y páginas en cada hoja. */
   async finish(): Promise<Buffer> {
     const doc = this.doc;
@@ -311,6 +318,22 @@ export class ReportPdf {
     const stamp = `Contabili (beta) · Generado el ${formatDate(limaDate(this.generatedAt))}`;
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
+      if (this.watermarkText) {
+        doc.save();
+        doc.rotate(-35, { origin: [doc.page.width / 2, doc.page.height / 2] });
+        doc
+          .font('displayHeavy')
+          .fontSize(46)
+          .fillColor(BRAND.terracotta)
+          .fillOpacity(0.12)
+          .text(this.watermarkText, 0, doc.page.height / 2 - 30, {
+            width: doc.page.width,
+            align: 'center',
+            lineBreak: false,
+          });
+        doc.restore();
+        doc.fillOpacity(1);
+      }
       const y = doc.page.height - MARGIN + 4;
       // Sin margen inferior mientras se escribe el pie, para que no abra otra página.
       const bottom = doc.page.margins.bottom;

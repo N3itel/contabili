@@ -239,6 +239,14 @@ void main() {
     await _tapText(tester, 'Impuestos de ${monthName(api.period)}');
     expect(find.text('Impuestos del mes'), findsOneWidget);
     expect(tester.takeException(), isNull, reason: 'Impuestos');
+    await tester.tap(find.byTooltip('Atrás'));
+    await tester.pumpAndSettle();
+    await _tapText(tester, 'Más');
+    await _tapText(tester, 'Facturación electrónica (beta)');
+    expect(tester.takeException(), isNull, reason: 'Facturación electrónica');
+    await _tapText(tester, 'Guardar');
+    await _tapText(tester, 'Emitir boleta o factura');
+    expect(tester.takeException(), isNull, reason: 'Emitir');
   });
 
   testWidgets('venta al crédito a un cliente nuevo: se ve cuánto debe', (tester) async {
@@ -400,6 +408,56 @@ void main() {
     expect(find.text('Abrimos el reporte en tu navegador.'), findsOneWidget);
   });
 
+  testWidgets('facturación electrónica: configura el modo de prueba y emite una boleta', (
+    tester,
+  ) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    final h = _Harness(api);
+    await h.pump(tester);
+    await _tapText(tester, 'Más');
+    await _tapText(tester, 'Facturación electrónica (beta)');
+    expect(find.text('¿Cómo quieres emitir?'), findsOneWidget);
+    await _tapText(tester, 'Guardar');
+    expect(find.text('Modo de prueba'), findsOneWidget);
+    expect(find.text('Listo: ya puedes emitir en modo de prueba.'), findsOneWidget);
+
+    await _tapText(tester, 'Emitir boleta o factura');
+    await tester.enterText(find.widgetWithText(TextField, 'Total, con IGV'), '118');
+    await tester.enterText(find.widgetWithText(TextField, '¿Qué vendiste?'), 'Abarrotes varios');
+    await tester.pump();
+    expect(find.text('S/ 100.00 es tu venta y S/ 18.00 es IGV.'), findsOneWidget);
+    await _tapButton(tester, 'Emitir boleta');
+    expect(find.text('¡Listo! (de prueba)'), findsOneWidget);
+    expect(find.text('Boleta B001-00000001 por S/ 118.00'), findsOneWidget);
+    expect(find.text('La venta quedó anotada y en tu registro de ventas.'), findsOneWidget);
+    await _tapText(tester, 'Ver PDF');
+    expect(h.opened.single.path, '/api/v1/exports/comprobante-de-prueba');
+    await _tapText(tester, 'Listo');
+    expect(find.text('Boleta B001-00000001'), findsOneWidget);
+
+    // La venta quedó con su comprobante.
+    expect(api.documents.single.$3.label, 'B001-1');
+  });
+
+  testWidgets('emitir factura pide RUC válido y nombre', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    api.einvoicing = const EinvoiceSettings(enabled: true);
+    await _Harness(api).pump(tester);
+    // Con la facturación activa, Inicio ofrece emitir.
+    await _tapText(tester, 'Emitir boleta o factura (prueba)');
+    await _tapText(tester, 'Factura');
+    await tester.enterText(find.widgetWithText(TextField, 'Total, con IGV'), '236');
+    await tester.enterText(find.widgetWithText(TextField, '¿Qué vendiste?'), 'Servicio de flete');
+    await tester.enterText(find.widgetWithText(TextField, 'RUC'), '20131312954');
+    await tester.enterText(find.widgetWithText(TextField, 'Razón social'), 'Comercial Andina SAC');
+    await _tapButton(tester, 'Emitir factura');
+    expect(find.text('El RUC no es válido.'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'RUC'), '20131312955');
+    await _tapButton(tester, 'Emitir factura');
+    expect(find.text('Factura F001-00000001 por S/ 236.00'), findsOneWidget);
+    expect(api.documents.single.$3.counterpartyRuc, '20131312955');
+  });
+
   testWidgets('se ve que es beta', (tester) async {
     final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
     await _Harness(api).pump(tester);
@@ -414,6 +472,15 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('¿Qué pasó hoy?'), findsOneWidget);
   });
+}
+
+/// Toca el botón principal (su texto puede repetirse en el título de la pantalla).
+Future<void> _tapButton(WidgetTester tester, String text) async {
+  final button = find.widgetWithText(FilledButton, text);
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+  await tester.pumpAndSettle();
 }
 
 void _largeText(WidgetTester tester) {
