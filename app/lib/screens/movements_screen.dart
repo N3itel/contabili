@@ -6,6 +6,7 @@ import '../core/money.dart';
 import '../session/session.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
+import 'registers_screen.dart';
 
 /// Lo anotado en el mes, del más nuevo al más antiguo. Un error se corrige
 /// anulándolo (se registra al revés, nunca se borra) y, quien registra, cierra el mes.
@@ -295,6 +296,16 @@ class _MovementsScreenState extends State<MovementsScreen> {
                 ],
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => RegistersScreen(session: widget.session),
+                    ),
+                  ),
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('Registros de ventas y compras'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
                   onPressed: _export,
                   icon: const Icon(Icons.download_outlined),
                   label: const Text('Descargar para Excel'),
@@ -423,7 +434,8 @@ class _EntryTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${formatDate(entry.entryDate)}${badge == null ? '' : ' · $badge'}',
+                    // El comprobante ya va en la glosa («… · Boleta B001-45»).
+                    [formatDate(entry.entryDate), ?badge].join(' · '),
                     style: const TextStyle(fontSize: 14, color: ContabiliColors.ink2),
                   ),
                 ],

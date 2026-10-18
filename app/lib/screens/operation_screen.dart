@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../api/api.dart';
 import '../core/dates.dart';
+import '../core/documents.dart';
 import '../core/money.dart';
 import '../core/operations.dart';
 import '../core/ruc.dart';
@@ -105,13 +106,20 @@ class OperationScreen extends StatefulWidget {
 
 class _OperationScreenState extends State<OperationScreen> {
   final _amount = TextEditingController();
-  final _reference = TextEditingController();
+  final _series = TextEditingController();
+  final _docNumber = TextEditingController();
+  final _docRuc = TextEditingController();
 
   SaleKind _kind = SaleKind.goods;
   ExpenseCategory _category = ExpenseCategory.services;
   Settlement _settlement = Settlement.cash;
   Money _money = Money.cash;
-  bool _withInvoice = true;
+
+  /// Comprobante de la venta o del gasto; null si no hubo. En un gasto, la
+  /// factura es lo que permite descontar el IGV.
+  late DocType? _docType = widget.type == OperationType.expense && _regime.chargesIgv
+      ? DocType.factura
+      : null;
   late TaxKind _tax = widget.initialTax;
   Contact? _contact;
   List<Contact>? _contacts;
@@ -136,7 +144,7 @@ class _OperationScreenState extends State<OperationScreen> {
         total,
         category: _category,
         paidWith: _settlement,
-        withInvoice: _withInvoice && _invoiceMatters,
+        withInvoice: _docType == DocType.factura,
       ),
       OperationType.collection => Collection(total, into: _money),
       OperationType.payment => Payment(total, from: _money),
@@ -191,8 +199,38 @@ class _OperationScreenState extends State<OperationScreen> {
   @override
   void dispose() {
     _amount.dispose();
-    _reference.dispose();
+    _series.dispose();
+    _docNumber.dispose();
+    _docRuc.dispose();
     super.dispose();
+  }
+
+  /// RUC del cliente o proveedor elegido, si lo tiene: no hace falta escribirlo.
+  String? get _contactRuc => (_contactKind == null ? null : _contact)?.ruc;
+
+  /// El comprobante que se manda, si la persona escribió serie y número.
+  OperationDocument? get _document {
+    final type = _docType;
+    if (type == null || (_series.text.trim().isEmpty && _docNumber.text.isEmpty)) return null;
+    final ruc = _docRuc.text.trim();
+    return OperationDocument(
+      type: type,
+      series: _series.text,
+      number: int.tryParse(_docNumber.text) ?? 0,
+      counterpartyRuc: ruc.isNotEmpty ? ruc : _contactRuc,
+    );
+  }
+
+  /// Qué le falta al comprobante, antes de mandarlo.
+  String? get _documentProblem {
+    if (_docType == null) return null;
+    final series = _series.text.trim().isNotEmpty, number = _docNumber.text.isNotEmpty;
+    if (series != number) {
+      return 'Escribe la serie y el número del comprobante, o deja los dos en blanco.';
+    }
+    final doc = _document, operation = _operation;
+    if (doc == null || operation == null) return null;
+    return documentProblem(operation, doc, _regime);
   }
 
   Future<void> _pickDate() async {
@@ -215,14 +253,15 @@ class _OperationScreenState extends State<OperationScreen> {
       _error = null;
     });
     try {
-      final reference = _reference.text.trim();
       final contact = _contactKind == null ? null : _contact;
+      final problem = _documentProblem;
+      if (problem != null) throw ApiException(status: 400, code: 'document', message: problem);
       final result = await widget.session.api.recordOperation(
         _company.id,
         operation,
         date: _date,
-        reference: reference.isEmpty ? null : reference,
         contactId: contact?.id,
+        document: _document,
       );
       if (!mounted) return;
       await _showDone(result.explanation);
@@ -300,7 +339,9 @@ class _OperationScreenState extends State<OperationScreen> {
     if (again == true) {
       setState(() {
         _amount.clear();
-        _reference.clear();
+        _series.clear();
+        _docNumber.clear();
+        _docRuc.clear();
       });
       // Avisa a Inicio que hubo cambios, aunque sigamos en esta pantalla.
       _savedSomething = true;
@@ -391,6 +432,7 @@ class _OperationScreenState extends State<OperationScreen> {
                   ),
                   const SizedBox(height: 22),
                   ..._details(),
+                  ..._documentSection(),
                   if (_contactKind case final kind?) ...[
                     const SizedBox(height: 18),
                     _ContactPicker(
@@ -412,14 +454,6 @@ class _OperationScreenState extends State<OperationScreen> {
                     subtitle: const Text('Fecha'),
                     trailing: TextButton(onPressed: _pickDate, child: const Text('Cambiar')),
                   ),
-                  TextField(
-                    controller: _reference,
-                    maxLength: 40,
-                    decoration: const InputDecoration(
-                      labelText: 'N.º de boleta o factura (si tienes)',
-                      hintText: 'B001-123',
-                    ),
-                  ),
                   const SizedBox(height: 8),
                   _Preview(operation: _operation, regime: _regime),
                   ErrorText(_error),
@@ -435,6 +469,116 @@ class _OperationScreenState extends State<OperationScreen> {
         ),
       ),
     );
+  }
+
+  List<Widget> _documentSection() {
+    final sale = widget.type == OperationType.sale;
+    if (!sale && widget.type != OperationType.expense) return const [];
+    final types = [
+      for (final t in DocType.values)
+        if ((sale ? t.sale : t.purchase) &&
+            !(sale && t == DocType.factura && _regime == TaxRegime.nrus))
+          t,
+    ];
+    final type = _docType;
+    return [
+      const SizedBox(height: 18),
+      ChoiceRow<DocType?>(
+        label: sale ? '¿Qué comprobante diste?' : '¿Qué comprobante te dieron?',
+        value: type,
+        onChanged: (v) => setState(() => _docType = v),
+        options: [
+          for (final t in types)
+            (
+              t,
+              t == DocType.other ? 'Otro' : t.label,
+              switch (t) {
+                DocType.factura => Icons.receipt_long_outlined,
+                DocType.boleta => Icons.receipt_outlined,
+                DocType.recibo => Icons.badge_outlined,
+                DocType.ticket => Icons.confirmation_number_outlined,
+                DocType.other => Icons.description_outlined,
+              },
+            ),
+          (null, 'Ninguno', Icons.do_not_disturb_alt_outlined),
+        ],
+      ),
+      if (!sale && _invoiceMatters) ...[
+        const SizedBox(height: 6),
+        Text(
+          type == DocType.factura
+              ? 'Con factura a nombre de tu empresa, el IGV te ayuda a pagar menos a SUNAT.'
+              : 'Sin factura, el IGV de este gasto no se puede descontar.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+      if (type != null) ...[
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _series,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9-]')),
+                  LengthLimitingTextInputFormatter(20),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Serie',
+                  hintText: switch (type) {
+                    DocType.factura => 'F001',
+                    DocType.boleta => 'B001',
+                    DocType.recibo => 'E001',
+                    _ => '0001',
+                  },
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: _docNumber,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                decoration: const InputDecoration(labelText: 'Número', hintText: '123'),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          ],
+        ),
+        if (type.needsRuc && _contactRuc == null) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _docRuc,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(11),
+            ],
+            decoration: InputDecoration(
+              labelText: sale ? 'RUC del cliente' : 'RUC de quien te lo dio',
+              errorText: _docRuc.text.length == 11 && !isValidRuc(_docRuc.text)
+                  ? 'Ese RUC no es válido.'
+                  : null,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          'Con serie y número, entra a tu registro de ${sale ? 'ventas' : 'compras'}.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ];
   }
 
   List<Widget> _details() {
@@ -494,19 +638,6 @@ class _OperationScreenState extends State<OperationScreen> {
             onChanged: (v) => setState(() => _settlement = v),
             options: const [cash, bank, (Settlement.credit, 'Lo debo', Icons.schedule_outlined)],
           ),
-          if (_invoiceMatters) ...[
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _withInvoice,
-              onChanged: (v) => setState(() => _withInvoice = v),
-              title: const Text(
-                'Tengo factura a nombre de mi empresa',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: const Text('Con factura, el IGV te ayuda a pagar menos a SUNAT.'),
-            ),
-          ],
         ];
       case OperationType.taxPayment:
         return [

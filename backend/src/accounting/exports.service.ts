@@ -10,9 +10,16 @@ import { DRIZZLE, type Database } from '../db/db.module.js';
 import { accounts, companies, contacts, journalEntries, journalLines } from '../db/schema/index.js';
 import { CSV_BOM, csvAmount, csvRow, csvText } from './csv.js';
 import { formatDate } from './lima.js';
+import { RegistersService } from './registers.service.js';
 import { ReportsService } from './reports.service.js';
 
-export type ExportKind = 'journal' | 'trial_balance';
+export const EXPORT_KINDS = [
+  'journal',
+  'trial_balance',
+  'sales_register',
+  'purchase_register',
+] as const;
+export type ExportKind = (typeof EXPORT_KINDS)[number];
 
 /** El enlace de descarga vale 5 minutos. */
 export const EXPORT_TTL_SECONDS = 5 * 60;
@@ -50,6 +57,7 @@ export class ExportsService {
     @Inject(DRIZZLE) private readonly db: Database,
     @Inject(CompanyAccess) private readonly access: CompanyAccess,
     @Inject(ReportsService) private readonly reports: ReportsService,
+    @Inject(RegistersService) private readonly registers: RegistersService,
     @Inject(ConfigService) config: ConfigService<Env, true>,
   ) {
     this.key = new Uint8Array(deriveKey(config.get('AUTH_JWT_SECRET', { infer: true }), 'export'));
@@ -91,6 +99,13 @@ export class ExportsService {
         body: await this.trialBalanceCsv(claims),
       };
     }
+    if (claims.kind === 'sales_register' || claims.kind === 'purchase_register') {
+      const sales = claims.kind === 'sales_register';
+      return {
+        filename: `registro-de-${sales ? 'ventas' : 'compras'}-${company.ruc}-${range}.csv`,
+        body: await this.registerCsv(claims, sales ? 'sale' : 'purchase'),
+      };
+    }
     return {
       filename: `libro-diario-${company.ruc}-${range}.csv`,
       body: await this.journalCsv(claims),
@@ -107,13 +122,13 @@ export class ExportsService {
       if (
         typeof sub !== 'string' ||
         typeof cid !== 'string' ||
-        (k !== 'journal' && k !== 'trial_balance') ||
+        !EXPORT_KINDS.includes(k as ExportKind) ||
         typeof f !== 'string' ||
         typeof t !== 'string'
       ) {
         throw linkExpired();
       }
-      return { userId: sub, companyId: cid, kind: k, from: f, to: t };
+      return { userId: sub, companyId: cid, kind: k as ExportKind, from: f, to: t };
     } catch {
       throw linkExpired();
     }
@@ -167,6 +182,60 @@ export class ExportsService {
         csvText(r.contact ?? ''),
       ]);
     }
+    return csv;
+  }
+
+  private async registerCsv(claims: ExportClaims, direction: 'sale' | 'purchase'): Promise<string> {
+    const report = await this.registers.register(
+      claims.companyId,
+      claims.userId,
+      direction,
+      claims.from,
+      claims.to,
+    );
+    let csv = CSV_BOM;
+    csv += csvRow([
+      'Fecha de emisión',
+      'Tipo',
+      'Comprobante',
+      'Serie',
+      'Número',
+      direction === 'sale' ? 'RUC del cliente' : 'RUC del proveedor',
+      direction === 'sale' ? 'Cliente' : 'Proveedor',
+      'Base imponible',
+      'IGV',
+      'Total',
+      'Estado',
+    ]);
+    for (const r of report.rows) {
+      csv += csvRow([
+        formatDate(r.issueDate),
+        r.docType,
+        csvText(r.docTypeLabel),
+        csvText(r.series),
+        String(r.number),
+        r.counterpartyRuc ?? '',
+        csvText(r.counterpartyName ?? ''),
+        csvAmount(r.base),
+        csvAmount(r.igv),
+        csvAmount(r.total),
+        r.annulled ? 'Anulado' : '',
+      ]);
+    }
+    const t = report.totals;
+    csv += csvRow([
+      '',
+      '',
+      'Totales',
+      '',
+      '',
+      '',
+      '',
+      csvAmount(t.base),
+      csvAmount(t.igv),
+      csvAmount(t.total),
+      '',
+    ]);
     return csv;
   }
 

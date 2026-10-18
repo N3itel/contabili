@@ -78,6 +78,20 @@
       "when": 1792281178101,
       "tag": "0010_origen_de_asientos",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792284805330,
+      "tag": "0011_comprobantes",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792284812686,
+      "tag": "0012_comprobantes_inmutables",
+      "breakpoints": true
     }
   ]
 }

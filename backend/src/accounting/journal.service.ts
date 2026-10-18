@@ -10,6 +10,7 @@ import {
   accounts,
   companies,
   contacts,
+  documents,
   journalEntries,
   journalLines,
   users,
@@ -25,7 +26,7 @@ import {
 import { formatDate, isValidDate, limaDate, periodRange } from './lima.js';
 import type { Cents } from './money.js';
 
-type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
 export type EntrySource =
   'manual' | 'sale' | 'expense' | 'collection' | 'payment' | 'tax_payment' | 'reversal';
@@ -50,6 +51,8 @@ export interface JournalEntryDto {
   reversesEntryId: string | null;
   /** Extorno que anuló este asiento, si lo hubo. */
   reversedByEntryId: string | null;
+  /** Comprobante de la venta o del gasto, si se registró. */
+  document: { type: string; series: string; number: number } | null;
   createdBy: { id: string; fullName: string };
   createdAt: Date;
   lines: {
@@ -78,9 +81,22 @@ export class JournalService {
   ) {}
 
   /** Registra un asiento con el siguiente número correlativo del ejercicio. */
-  async post(companyId: string, actorId: string, input: NewJournalEntry): Promise<JournalEntryDto> {
+  /**
+   * Registra un asiento. `alongside` corre en la misma transacción, después
+   * del asiento (por ejemplo, para guardar su comprobante): si falla, no queda nada.
+   */
+  async post(
+    companyId: string,
+    actorId: string,
+    input: NewJournalEntry,
+    alongside?: (tx: Tx, entryId: string) => Promise<void>,
+  ): Promise<JournalEntryDto> {
     await this.access.requireWritable(companyId, actorId, 'accountant');
-    const id = await this.db.transaction((tx) => this.insert(tx, companyId, actorId, input, null));
+    const id = await this.db.transaction(async (tx) => {
+      const entryId = await this.insert(tx, companyId, actorId, input, null);
+      if (alongside) await alongside(tx, entryId);
+      return entryId;
+    });
     return this.get(companyId, actorId, id);
   }
 
@@ -294,6 +310,9 @@ export class JournalService {
         source: journalEntries.source,
         reversesEntryId: journalEntries.reversesEntryId,
         reversedByEntryId: reversal.id,
+        docType: documents.docType,
+        docSeries: documents.series,
+        docNumber: documents.number,
         createdById: users.id,
         createdByName: users.fullName,
         createdAt: journalEntries.createdAt,
@@ -301,6 +320,7 @@ export class JournalService {
       .from(journalEntries)
       .innerJoin(users, eq(users.id, journalEntries.createdBy))
       .leftJoin(reversal, eq(reversal.reversesEntryId, journalEntries.id))
+      .leftJoin(documents, eq(documents.entryId, journalEntries.id))
       .where(and(eq(journalEntries.companyId, companyId), where))
       .orderBy(asc(journalEntries.fiscalYear), asc(journalEntries.number))
       .limit(limit);
@@ -330,26 +350,32 @@ export class JournalService {
     const byEntry = new Map<string, typeof lines>();
     for (const l of lines) byEntry.set(l.entryId, [...(byEntry.get(l.entryId) ?? []), l]);
 
-    return entries.map(({ createdById, createdByName, source, ...e }) => {
-      const entryLines = (byEntry.get(e.id) ?? []).map((l) => ({
-        lineNo: l.lineNo,
-        accountCode: l.accountCode,
-        accountName: l.accountName,
-        debit: l.debit,
-        credit: l.credit,
-        contact: l.contactId ? { id: l.contactId, name: l.contactName ?? '' } : null,
-      }));
-      return {
-        ...e,
-        source: source as EntrySource,
-        createdBy: { id: createdById, fullName: createdByName },
-        lines: entryLines,
-        totals: {
-          debit: entryLines.reduce((sum, l) => sum + l.debit, 0),
-          credit: entryLines.reduce((sum, l) => sum + l.credit, 0),
-        },
-      };
-    });
+    return entries.map(
+      ({ createdById, createdByName, source, docType, docSeries, docNumber, ...e }) => {
+        const entryLines = (byEntry.get(e.id) ?? []).map((l) => ({
+          lineNo: l.lineNo,
+          accountCode: l.accountCode,
+          accountName: l.accountName,
+          debit: l.debit,
+          credit: l.credit,
+          contact: l.contactId ? { id: l.contactId, name: l.contactName ?? '' } : null,
+        }));
+        return {
+          ...e,
+          source: source as EntrySource,
+          document:
+            docType && docSeries && docNumber
+              ? { type: docType, series: docSeries, number: docNumber }
+              : null,
+          createdBy: { id: createdById, fullName: createdByName },
+          lines: entryLines,
+          totals: {
+            debit: entryLines.reduce((sum, l) => sum + l.debit, 0),
+            credit: entryLines.reduce((sum, l) => sum + l.credit, 0),
+          },
+        };
+      },
+    );
   }
 }
 

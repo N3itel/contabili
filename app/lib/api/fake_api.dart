@@ -1,3 +1,4 @@
+import '../core/documents.dart';
 import '../core/money.dart';
 import '../core/operations.dart';
 import 'api.dart';
@@ -171,8 +172,41 @@ class FakeContabiliApi implements ContabiliApi {
     String? date,
     String? reference,
     String? contactId,
+    OperationDocument? document,
   }) async {
     _check();
+    var doc = document;
+    if (doc != null) {
+      final company = _companies.firstWhere((c) => c.id == companyId);
+      final contact = contactId == null ? null : _contacts.firstWhere((c) => c.id == contactId);
+      doc = OperationDocument(
+        type: doc.type,
+        series: normalizeSeries(doc.series),
+        number: doc.number,
+        counterpartyRuc: doc.counterpartyRuc ?? contact?.ruc,
+        counterpartyName: doc.counterpartyName ?? contact?.name,
+      );
+      final problem = documentProblem(operation, doc, company.taxRegime);
+      if (problem != null) {
+        throw ApiException(status: 400, code: 'document_invalid', message: problem);
+      }
+      final sale = operation is Sale;
+      final repeated = documents.any(
+        (d) =>
+            d.$2 is Sale == sale &&
+            d.$3.type == doc!.type &&
+            d.$3.series == doc.series &&
+            d.$3.number == doc.number &&
+            (sale || d.$3.counterpartyRuc == doc.counterpartyRuc),
+      );
+      if (repeated) {
+        throw ApiException(
+          status: 409,
+          code: 'document_duplicate',
+          message: 'Ya registraste la ${doc.type.label.toLowerCase()} ${doc.label}.',
+        );
+      }
+    }
     if (contactId != null) {
       final contact = _contacts.firstWhere((c) => c.id == contactId);
       if (contact.kind != operationContactKind(operation)) {
@@ -267,10 +301,15 @@ class FakeContabiliApi implements ContabiliApi {
       number: list.length + 1,
       fiscalYear: 2026,
       entryDate: date ?? '$period-17',
-      description: reference == null ? description : '$description · $reference',
+      description: doc != null
+          ? '$description · ${doc.type.label} ${doc.label}'
+          : reference == null
+          ? description
+          : '$description · $reference',
       createdBy: user.fullName,
       lines: const [],
       total: operation.total,
+      document: doc == null ? null : EntryDocument(doc.type, doc.series, doc.number),
       source: switch (operation) {
         Sale() => EntrySource.sale,
         Expense() => EntrySource.expense,
@@ -280,6 +319,7 @@ class FakeContabiliApi implements ContabiliApi {
       },
     );
     list.add(entry);
+    if (doc != null) documents.add((entry, operation, doc, split.igv));
     return OperationResult(
       entry: entry,
       explanation: split.igv > 0
@@ -329,6 +369,46 @@ class FakeContabiliApi implements ContabiliApi {
   }
 
   final List<String> closedPeriods = [];
+
+  /// Comprobantes registrados: asiento, operación, comprobante e IGV.
+  final List<(JournalEntry, Operation, OperationDocument, int)> documents = [];
+
+  @override
+  Future<Register> documentRegister(
+    String companyId,
+    RegisterKind kind, {
+    required String period,
+  }) async {
+    _check();
+    final reversed = {
+      for (final e in [...?_entries[companyId]])
+        if (e.reversesEntryId != null) e.reversesEntryId!,
+    };
+    final rows = [
+      for (final (entry, operation, doc, igv) in documents)
+        if ((operation is Sale) == (kind == RegisterKind.sales))
+          RegisterRow(
+            entryId: entry.id,
+            issueDate: entry.entryDate,
+            type: doc.type,
+            series: doc.series,
+            number: doc.number,
+            counterpartyRuc: doc.counterpartyRuc,
+            counterpartyName: doc.counterpartyName,
+            base: operation.total - igv,
+            igv: igv,
+            total: operation.total,
+            annulled: reversed.contains(entry.id),
+          ),
+    ];
+    final valid = rows.where((r) => !r.annulled);
+    return Register(
+      rows: rows,
+      base: valid.fold(0, (sum, r) => sum + r.base),
+      igv: valid.fold(0, (sum, r) => sum + r.igv),
+      total: valid.fold(0, (sum, r) => sum + r.total),
+    );
+  }
 
   @override
   Future<void> closePeriod(String companyId, String period) async {

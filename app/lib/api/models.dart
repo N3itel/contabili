@@ -1,3 +1,4 @@
+import '../core/documents.dart';
 import '../core/money.dart';
 import '../core/operations.dart';
 
@@ -230,6 +231,7 @@ class JournalEntry {
     this.reversesEntryId,
     this.reversedByEntryId,
     this.source = EntrySource.manual,
+    this.document,
   });
 
   factory JournalEntry.fromJson(Json json) => JournalEntry(
@@ -244,6 +246,14 @@ class JournalEntry {
     reversesEntryId: json['reversesEntryId'] as String?,
     reversedByEntryId: json['reversedByEntryId'] as String?,
     source: EntrySource.fromWire(json['source'] as String?),
+    document: switch (json['document']) {
+      final Json d => EntryDocument(
+        DocType.fromWire(d['type'] as String),
+        d['series'] as String,
+        d['number'] as int,
+      ),
+      _ => null,
+    },
   );
 
   final String id;
@@ -258,8 +268,21 @@ class JournalEntry {
   final String? reversedByEntryId;
   final EntrySource source;
 
+  /// Comprobante de la venta o del gasto, si se registró.
+  final EntryDocument? document;
+
   bool get isReversal => reversesEntryId != null;
   bool get isReversed => reversedByEntryId != null;
+}
+
+/// El comprobante de un asiento, para mostrarlo («Factura F001-123»).
+class EntryDocument {
+  const EntryDocument(this.type, this.series, this.number);
+  final DocType type;
+  final String series;
+  final int number;
+
+  String get label => '${type.label} $series-$number';
 }
 
 class JournalPage {
@@ -527,9 +550,85 @@ class TrendPoint {
 
 enum ExportKind {
   journal('journal', 'Libro diario'),
-  trialBalance('trial_balance', 'Balance de comprobación');
+  trialBalance('trial_balance', 'Balance de comprobación'),
+  salesRegister('sales_register', 'Registro de ventas'),
+  purchaseRegister('purchase_register', 'Registro de compras');
 
   const ExportKind(this.wire, this.label);
   final String wire;
   final String label;
+}
+
+/// Registro de ventas o de compras: los comprobantes de un mes.
+enum RegisterKind {
+  sales('sales', 'Ventas', ExportKind.salesRegister),
+  purchases('purchases', 'Compras', ExportKind.purchaseRegister);
+
+  const RegisterKind(this.wire, this.label, this.export);
+  final String wire;
+  final String label;
+  final ExportKind export;
+}
+
+class RegisterRow {
+  const RegisterRow({
+    required this.entryId,
+    required this.issueDate,
+    required this.type,
+    required this.series,
+    required this.number,
+    required this.counterpartyRuc,
+    required this.counterpartyName,
+    required this.base,
+    required this.igv,
+    required this.total,
+    required this.annulled,
+  });
+
+  factory RegisterRow.fromJson(Json json) => RegisterRow(
+    entryId: json['entryId'] as String,
+    issueDate: json['issueDate'] as String,
+    type: DocType.fromWire(json['docType'] as String),
+    series: json['series'] as String,
+    number: json['number'] as int,
+    counterpartyRuc: json['counterpartyRuc'] as String?,
+    counterpartyName: json['counterpartyName'] as String?,
+    base: json['base'] as int,
+    igv: json['igv'] as int,
+    total: json['total'] as int,
+    annulled: json['annulled'] as bool,
+  );
+
+  final String entryId;
+  final String issueDate;
+  final DocType type;
+  final String series;
+  final int number;
+  final String? counterpartyRuc;
+  final String? counterpartyName;
+  final Cents base;
+  final Cents igv;
+  final Cents total;
+  final bool annulled;
+
+  String get label => '$series-$number';
+}
+
+class Register {
+  const Register({required this.rows, required this.base, required this.igv, required this.total});
+
+  factory Register.fromJson(Json json) {
+    final totals = json['totals'] as Json;
+    return Register(
+      rows: [for (final r in json['rows'] as List) RegisterRow.fromJson(r as Json)],
+      base: totals['base'] as int,
+      igv: totals['igv'] as int,
+      total: totals['total'] as int,
+    );
+  }
+
+  final List<RegisterRow> rows;
+  final Cents base;
+  final Cents igv;
+  final Cents total;
 }

@@ -36,3 +36,6 @@ export const orderStatus = pgEnum('order_status', [
 
 /** Clientes (te deben) y proveedores (les debes). */
 export const contactKind = pgEnum('contact_kind', ['customer', 'supplier']);
+
+/** Comprobante que la empresa emite (venta) o que recibe (compra). */
+export const documentDirection = pgEnum('document_direction', ['sale', 'purchase']);

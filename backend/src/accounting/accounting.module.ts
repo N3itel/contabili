@@ -9,6 +9,7 @@ import { ExportsService } from './exports.service.js';
 import { JournalService } from './journal.service.js';
 import { OperationsService } from './operations.service.js';
 import { PeriodsService } from './periods.service.js';
+import { RegistersService } from './registers.service.js';
 import { ReportsService } from './reports.service.js';
 
 @Module({
@@ -27,6 +28,7 @@ import { ReportsService } from './reports.service.js';
     OperationsService,
     ContactsService,
     ExportsService,
+    RegistersService,
   ],
   exports: [JournalService],
 })

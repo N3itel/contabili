@@ -1,14 +1,25 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 import { apiError } from '../common/http.js';
+import { uniqueViolation } from '../common/pg.js';
 import { DRIZZLE, type Database } from '../db/db.module.js';
-import { companies, contacts } from '../db/schema/index.js';
+import { companies, contacts, documents } from '../db/schema/index.js';
+import {
+  DOCUMENT_PROBLEM_MESSAGES,
+  DOCUMENT_TYPES,
+  type DocumentInput,
+  documentDirection,
+  documentLabel,
+  documentProblem,
+  normalizeSeries,
+} from './document-rules.js';
 import { JournalService, type JournalEntryDto } from './journal.service.js';
 import { limaDate } from './lima.js';
 import {
   buildOperation,
   isMoneyAccountCode,
   type Operation,
+  OPERATION_ACCOUNTS,
   operationContactKind,
 } from './operations.js';
 
@@ -18,8 +29,10 @@ export interface OperationInput {
   contactId?: string;
   /** Por defecto, hoy (hora de Lima). */
   date?: string;
-  /** Número del comprobante (F001-123, B001-45) u otra referencia corta. */
+  /** Referencia corta libre (va en la glosa). Para el registro, usa `document`. */
   reference?: string;
+  /** Comprobante de la venta o del gasto: arma los registros de ventas y compras. */
+  document?: DocumentInput;
   moneyAccountCode?: string;
 }
 
@@ -48,25 +61,87 @@ export class OperationsService {
       .select({ taxRegime: companies.taxRegime })
       .from(companies)
       .where(eq(companies.id, companyId));
-    if (input.contactId) await this.assertContact(companyId, input.contactId, input.operation);
+    const regime = company?.taxRegime ?? 'general';
+    const contact = input.contactId
+      ? await this.assertContact(companyId, input.contactId, input.operation)
+      : null;
+    const doc = input.document
+      ? { ...input.document, series: normalizeSeries(input.document.series) }
+      : null;
+    if (doc) {
+      // Sin RUC en el comprobante, vale el del cliente o proveedor elegido.
+      doc.counterpartyRuc ??= contact?.ruc ?? undefined;
+      doc.counterpartyName ??= contact?.name;
+      const problem = documentProblem(input.operation, doc, regime);
+      if (problem) {
+        throw apiError(HttpStatus.BAD_REQUEST, problem, DOCUMENT_PROBLEM_MESSAGES[problem]);
+      }
+    }
     const built = buildOperation(input.operation, {
-      taxRegime: company?.taxRegime ?? 'general',
+      taxRegime: regime,
       moneyAccountCode: input.moneyAccountCode,
       contactId: input.contactId,
     });
-    const entry = await this.journal.post(companyId, actorId, {
-      entryDate: input.date ?? limaDate(new Date()),
-      description: input.reference
-        ? `${built.description} · ${input.reference}`
-        : built.description,
-      lines: built.lines,
-      source: input.operation.type,
-    });
-    return { entry, explanation: built.explanation };
+    const entryDate = input.date ?? limaDate(new Date());
+    const reference = doc
+      ? `${DOCUMENT_TYPES[doc.type].label} ${documentLabel(doc.series, doc.number)}`
+      : input.reference;
+    try {
+      const entry = await this.journal.post(
+        companyId,
+        actorId,
+        {
+          entryDate,
+          description: reference ? `${built.description} · ${reference}` : built.description,
+          lines: built.lines,
+          source: input.operation.type,
+        },
+        doc
+          ? async (tx, entryId) => {
+              const total = input.operation.total;
+              const igv = built.lines
+                .filter((l) => l.accountCode === OPERATION_ACCOUNTS.igv)
+                .reduce((sum, l) => sum + l.debit + l.credit, 0);
+              await tx.insert(documents).values({
+                companyId,
+                entryId,
+                direction: documentDirection(input.operation)!,
+                docType: doc.type,
+                series: doc.series,
+                number: doc.number,
+                issueDate: entryDate,
+                counterpartyRuc: doc.counterpartyRuc ?? null,
+                counterpartyName: doc.counterpartyName?.trim() || null,
+                baseCents: total - igv,
+                igvCents: igv,
+                totalCents: total,
+              });
+            }
+          : undefined,
+      );
+      return { entry, explanation: built.explanation };
+    } catch (error) {
+      const constraint = uniqueViolation(error);
+      if (doc && (constraint === 'documents_sale_uq' || constraint === 'documents_purchase_uq')) {
+        const label = `${DOCUMENT_TYPES[doc.type].label.toLowerCase()} ${documentLabel(doc.series, doc.number)}`;
+        throw apiError(
+          HttpStatus.CONFLICT,
+          'document_duplicate',
+          constraint === 'documents_sale_uq'
+            ? `Ya registraste la ${label}. Revisa el número: cada comprobante tuyo va una sola vez.`
+            : `Ya registraste la ${label} de ese proveedor.`,
+        );
+      }
+      throw error;
+    }
   }
 
   /** El contacto es de la empresa, sigue activo y es del tipo que pide la operación. */
-  private async assertContact(companyId: string, contactId: string, op: Operation): Promise<void> {
+  private async assertContact(
+    companyId: string,
+    contactId: string,
+    op: Operation,
+  ): Promise<{ name: string; ruc: string | null }> {
     const kind = operationContactKind(op);
     if (!kind) {
       throw apiError(
@@ -76,7 +151,7 @@ export class OperationsService {
       );
     }
     const [contact] = await this.db
-      .select({ kind: contacts.kind })
+      .select({ kind: contacts.kind, name: contacts.name, ruc: contacts.ruc })
       .from(contacts)
       .where(
         and(
@@ -101,5 +176,6 @@ export class OperationsService {
           : 'Elige un proveedor, no un cliente.',
       );
     }
+    return { name: contact.name, ruc: contact.ruc };
   }
 }

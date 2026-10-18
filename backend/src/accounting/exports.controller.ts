@@ -3,12 +3,12 @@ import type { Response } from 'express';
 import { z } from 'zod';
 import { type AuthContext, CurrentAuth, Public } from '../auth/auth.guard.js';
 import { apiError, uuidParam, ZodPipe } from '../common/http.js';
-import { ExportsService } from './exports.service.js';
+import { EXPORT_KINDS, ExportsService } from './exports.service.js';
 import { isValidDate } from './lima.js';
 
 const date = z.string().refine(isValidDate, 'Usa el formato AAAA-MM-DD');
 const linkBody = z
-  .object({ kind: z.enum(['journal', 'trial_balance']), from: date, to: date })
+  .object({ kind: z.enum(EXPORT_KINDS), from: date, to: date })
   .refine((b) => b.from <= b.to, 'La fecha inicial es posterior a la final');
 
 /** Pedir el enlace de descarga (con sesión). */

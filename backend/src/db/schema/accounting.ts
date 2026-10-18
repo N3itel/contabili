@@ -15,7 +15,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { createdAt, id, ts } from './columns.js';
-import { accountNature, contactKind, taxRegime } from './enums.js';
+import { accountNature, contactKind, documentDirection, taxRegime } from './enums.js';
 import { users } from './users.js';
 
 /**
@@ -192,6 +192,66 @@ export const journalLines = pgTable(
       sql`(${t.debitCents} > 0 AND ${t.creditCents} = 0) OR (${t.creditCents} > 0 AND ${t.debitCents} = 0)`,
     ),
     check('journal_lines_line_no', sql`${t.lineNo} BETWEEN 1 AND 200`),
+  ],
+);
+
+/**
+ * Comprobante de pago de una venta o de un gasto: arma los registros de
+ * ventas y de compras. Va uno por asiento y, como el asiento, no se edita
+ * ni se borra (trigger `documents_immutable`); si el asiento se extorna, el
+ * comprobante figura como anulado.
+ */
+export const documents = pgTable(
+  'documents',
+  {
+    id: id(),
+    companyId: uuid('company_id').notNull(),
+    entryId: uuid('entry_id').notNull(),
+    direction: documentDirection('direction').notNull(),
+    /** Tabla 10 de SUNAT: 01 factura, 03 boleta, 02 recibo por honorarios, 12 ticket, 00 otro. */
+    docType: varchar('doc_type', { length: 2 }).notNull(),
+    series: varchar('series', { length: 20 }).notNull(),
+    number: integer('number').notNull(),
+    issueDate: date('issue_date').notNull(),
+    counterpartyRuc: varchar('counterparty_ruc', { length: 11 }),
+    counterpartyName: varchar('counterparty_name', { length: 120 }),
+    baseCents: bigint('base_cents', { mode: 'number' }).notNull(),
+    igvCents: bigint('igv_cents', { mode: 'number' }).notNull(),
+    totalCents: bigint('total_cents', { mode: 'number' }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: 'documents_entry_fk',
+      columns: [t.entryId, t.companyId],
+      foreignColumns: [journalEntries.id, journalEntries.companyId],
+    }),
+    unique('documents_entry_uq').on(t.entryId),
+    // La empresa no repite un número de su propia serie.
+    uniqueIndex('documents_sale_uq')
+      .on(t.companyId, t.docType, t.series, t.number)
+      .where(sql`${t.direction} = 'sale'`),
+    // El mismo comprobante de un proveedor no se registra dos veces.
+    uniqueIndex('documents_purchase_uq')
+      .on(t.companyId, t.docType, t.series, t.number, t.counterpartyRuc)
+      .where(sql`${t.direction} = 'purchase'`),
+    index('documents_register_idx').on(t.companyId, t.direction, t.issueDate),
+    check('documents_doc_type', sql`${t.docType} IN ('01', '02', '03', '12', '00')`),
+    check('documents_recibo_purchase', sql`${t.docType} <> '02' OR ${t.direction} = 'purchase'`),
+    check(
+      'documents_ruc_required',
+      sql`${t.docType} NOT IN ('01', '02') OR ${t.counterpartyRuc} IS NOT NULL`,
+    ),
+    check(
+      'documents_ruc_format',
+      sql`${t.counterpartyRuc} IS NULL OR ${t.counterpartyRuc} ~ '^(10|15|16|17|20)[0-9]{9}$'`,
+    ),
+    check('documents_series_format', sql`${t.series} ~ '^[A-Z0-9-]{1,20}$'`),
+    check('documents_number_range', sql`${t.number} BETWEEN 1 AND 99999999`),
+    check(
+      'documents_amounts',
+      sql`${t.baseCents} >= 0 AND ${t.igvCents} >= 0 AND ${t.baseCents} + ${t.igvCents} = ${t.totalCents} AND ${t.totalCents} > 0`,
+    ),
   ],
 );
 

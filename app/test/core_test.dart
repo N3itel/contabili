@@ -1,4 +1,5 @@
 import 'package:contabili/core/dates.dart';
+import 'package:contabili/core/documents.dart';
 import 'package:contabili/core/igv.dart';
 import 'package:contabili/core/money.dart';
 import 'package:contabili/core/operations.dart';
@@ -110,6 +111,84 @@ void main() {
       expect(periodBounds('2026-02'), ('2026-02-01', '2026-02-28'));
       expect(periodBounds('2028-02'), ('2028-02-01', '2028-02-29'));
       expect(periodBounds('2026-12'), ('2026-12-01', '2026-12-31'));
+    });
+  });
+
+  group('comprobantes (backend/src/accounting/document-rules.spec.ts)', () {
+    const ruc = '20131312955';
+    final personRuc = '1045678912${rucCheckDigit('1045678912')}';
+    const sale = Sale(11800, kind: SaleKind.goods, paidWith: Settlement.cash);
+    const withInvoice = Expense(
+      11800,
+      category: ExpenseCategory.goods,
+      paidWith: Settlement.cash,
+      withInvoice: true,
+    );
+    const noInvoice = Expense(
+      11800,
+      category: ExpenseCategory.goods,
+      paidWith: Settlement.cash,
+      withInvoice: false,
+    );
+    OperationDocument factura({String series = 'F001', int number = 123, String? ruc = ruc}) =>
+        OperationDocument(
+          type: DocType.factura,
+          series: series,
+          number: number,
+          counterpartyRuc: ruc,
+        );
+    const boleta = OperationDocument(type: DocType.boleta, series: 'B001', number: 45);
+
+    test('factura de venta con el RUC del cliente; boleta sin RUC', () {
+      expect(documentProblem(sale, factura(), TaxRegime.rmt), isNull);
+      expect(documentProblem(sale, factura(ruc: null), TaxRegime.rmt), contains('RUC'));
+      expect(documentProblem(sale, factura(ruc: '20131312954'), TaxRegime.rmt), contains('RUC'));
+      expect(documentProblem(sale, boleta, TaxRegime.rmt), isNull);
+    });
+
+    test('en el Nuevo RUS no se emiten facturas', () {
+      expect(documentProblem(sale, factura(), TaxRegime.nrus), contains('Nuevo RUS'));
+      expect(documentProblem(sale, boleta, TaxRegime.nrus), isNull);
+    });
+
+    test('el recibo por honorarios es solo de compra y lleva RUC', () {
+      const recibo = OperationDocument(type: DocType.recibo, series: 'E001', number: 7);
+      expect(documentProblem(sale, recibo, TaxRegime.rmt), isNotNull);
+      expect(documentProblem(noInvoice, recibo, TaxRegime.rmt), contains('RUC'));
+      expect(
+        documentProblem(
+          noInvoice,
+          OperationDocument(
+            type: DocType.recibo,
+            series: 'E001',
+            number: 7,
+            counterpartyRuc: personRuc,
+          ),
+          TaxRegime.rmt,
+        ),
+        isNull,
+      );
+    });
+
+    test('«tengo factura» va solo con factura (menos en el Nuevo RUS)', () {
+      expect(documentProblem(withInvoice, factura(), TaxRegime.rmt), isNull);
+      expect(documentProblem(noInvoice, factura(), TaxRegime.rmt), isNotNull);
+      expect(documentProblem(withInvoice, boleta, TaxRegime.rmt), isNotNull);
+      expect(documentProblem(noInvoice, factura(), TaxRegime.nrus), isNull);
+    });
+
+    test('serie y número', () {
+      expect(normalizeSeries(' f001 '), 'F001');
+      expect(isValidSeries(DocType.factura, 'F001'), isTrue);
+      expect(isValidSeries(DocType.factura, '0001'), isTrue);
+      expect(isValidSeries(DocType.factura, 'F0001'), isFalse);
+      expect(isValidSeries(DocType.boleta, 'B-01'), isFalse);
+      expect(isValidSeries(DocType.ticket, 'FFCF123456-7'), isTrue);
+      expect(documentProblem(sale, factura(series: 'F 001'), TaxRegime.rmt), isNull);
+      expect(documentProblem(sale, factura(series: 'F00001'), TaxRegime.rmt), isNotNull);
+      expect(documentProblem(sale, factura(number: 0), TaxRegime.rmt), isNotNull);
+      expect(documentProblem(sale, factura(number: 100000000), TaxRegime.rmt), isNotNull);
+      expect(factura().label, 'F001-123');
     });
   });
 }

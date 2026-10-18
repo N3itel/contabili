@@ -120,6 +120,7 @@ class HttpContabiliApi implements ContabiliApi {
     String? date,
     String? reference,
     String? contactId,
+    OperationDocument? document,
   }) async {
     final json = await _json(
       'POST',
@@ -129,6 +130,7 @@ class HttpContabiliApi implements ContabiliApi {
         'date': ?date,
         'reference': ?reference,
         'contactId': ?contactId,
+        'document': ?document?.toJson(),
       },
     );
     return OperationResult(
@@ -212,6 +214,15 @@ class HttpContabiliApi implements ContabiliApi {
     for (final p in await _list('GET', '${_company(companyId)}/trend?months=$months'))
       TrendPoint.fromJson(p as Json),
   ];
+
+  @override
+  Future<Register> documentRegister(
+    String companyId,
+    RegisterKind kind, {
+    required String period,
+  }) async => Register.fromJson(
+    await _json('GET', '${_company(companyId)}/registers/${kind.wire}?period=$period'),
+  );
 
   @override
   Future<Uri> exportLink(

@@ -1,6 +1,8 @@
+import '../core/documents.dart';
 import '../core/operations.dart';
 import 'models.dart';
 
+export '../core/documents.dart' show DocType, OperationDocument;
 export 'models.dart';
 
 /// Lo que la app le pide al backend. `HttpContabiliApi` habla con el servidor
@@ -33,6 +35,7 @@ abstract interface class ContabiliApi {
     String? date,
     String? reference,
     String? contactId,
+    OperationDocument? document,
   });
   Future<JournalPage> journal(String companyId, {required String period, int after = 0});
   Future<JournalEntry> reverseEntry(String companyId, String entryId);
@@ -50,6 +53,7 @@ abstract interface class ContabiliApi {
   Future<ContactDetail> contact(String companyId, String contactId);
 
   Future<MonthlyTaxes> taxes(String companyId, {String? period});
+  Future<Register> documentRegister(String companyId, RegisterKind kind, {required String period});
   Future<List<TrendPoint>> trend(String companyId, {int months = 6});
 
   /// Enlace de descarga para Excel (vence en 5 minutos); se abre en el navegador.

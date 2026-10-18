@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../session/session.dart';
 import '../ui/theme.dart';
 import '../ui/widgets.dart';
+import 'registers_screen.dart';
 import 'taxes_screen.dart';
 import 'team_screen.dart';
 
@@ -65,6 +66,17 @@ class MoreScreen extends StatelessWidget {
                         MaterialPageRoute<void>(
                           builder: (_) => TaxesScreen(session: session, changes: changes),
                         ),
+                      ),
+                    ),
+                    const Divider(indent: 76),
+                    _MoreTile(
+                      icon: Icons.fact_check_outlined,
+                      color: ContabiliColors.terracotta,
+                      background: ContabiliColors.terracottaSoft,
+                      title: 'Registros de ventas y compras',
+                      subtitle: 'Tus boletas y facturas del mes',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => RegistersScreen(session: session)),
                       ),
                     ),
                     const Divider(indent: 76),

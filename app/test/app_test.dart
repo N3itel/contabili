@@ -311,6 +311,73 @@ void main() {
     expect(api.exports.last, (ExportKind.trialBalance, '${api.period.substring(0, 4)}-01-01', to));
   });
 
+  testWidgets('venta con boleta: entra al registro de ventas y se descarga', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    final h = _Harness(api);
+    await h.pump(tester);
+    await _tapText(tester, 'Vendí');
+    await tester.enterText(find.byType(TextField).first, '118');
+    await _tapText(tester, 'Boleta');
+    await tester.enterText(find.widgetWithText(TextField, 'Serie'), 'b001');
+    await tester.enterText(find.widgetWithText(TextField, 'Número'), '45');
+    await tester.pump();
+    expect(find.text('Con serie y número, entra a tu registro de ventas.'), findsOneWidget);
+    await _tapText(tester, 'Guardar');
+    await _tapText(tester, 'Listo');
+
+    await _tapText(tester, 'Movimientos');
+    expect(find.textContaining('Boleta B001-45'), findsOneWidget);
+    await _tapText(tester, 'Registros de ventas y compras');
+    expect(find.text('Boleta B001-45'), findsOneWidget);
+    expect(find.text('Total vendido con comprobante'), findsOneWidget);
+    expect(find.text('IGV S/ 18.00'), findsOneWidget);
+    await _tapText(tester, 'Descargar para Excel');
+    final (from, to) = periodBounds(api.period);
+    expect(api.exports.single, (ExportKind.salesRegister, from, to));
+
+    await _tapText(tester, 'Compras');
+    expect(find.text('Este mes no hay comprobantes de compra'), findsOneWidget);
+  });
+
+  testWidgets('factura sin RUC: avisa qué falta antes de guardar', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    await _Harness(api).pump(tester);
+    await _tapText(tester, 'Vendí');
+    await tester.enterText(find.byType(TextField).first, '118');
+    await _tapText(tester, 'Factura');
+    await tester.enterText(find.widgetWithText(TextField, 'Serie'), 'F001');
+    await tester.enterText(find.widgetWithText(TextField, 'Número'), '7');
+    await _tapText(tester, 'Guardar');
+    expect(
+      find.text('Escribe el RUC: una factura o un recibo por honorarios siempre lo lleva.'),
+      findsOneWidget,
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'RUC del cliente'), '20131312955');
+    await _tapText(tester, 'Guardar');
+    expect(find.text('¡Listo, quedó anotado!'), findsOneWidget);
+    expect(api.documents.single.$3.counterpartyRuc, '20131312955');
+  });
+
+  testWidgets('gasto: con boleta no se descuenta el IGV', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    await _Harness(api).pump(tester);
+    await _tapText(tester, 'Gasté');
+    await tester.enterText(find.byType(TextField).first, '118');
+    await tester.pump();
+    expect(find.text('S/ 100.00 es tu gasto y S/ 18.00 es IGV.'), findsOneWidget);
+    await _tapText(tester, 'Boleta');
+    expect(find.text('Sin factura, el IGV de este gasto no se puede descontar.'), findsOneWidget);
+    expect(find.text('No lleva IGV que descontar.'), findsOneWidget);
+  });
+
+  testWidgets('en el Nuevo RUS la venta no ofrece factura', (tester) async {
+    final api = FakeContabiliApi(signedIn: true, companies: [_company(regime: TaxRegime.nrus)]);
+    await _Harness(api).pump(tester);
+    await _tapText(tester, 'Vendí');
+    expect(find.text('Boleta'), findsOneWidget);
+    expect(find.text('Factura'), findsNothing);
+  });
+
   testWidgets('se ve que es beta', (tester) async {
     final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
     await _Harness(api).pump(tester);

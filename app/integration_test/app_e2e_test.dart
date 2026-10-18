@@ -169,11 +169,25 @@ void main() {
     await _tap(tester, 'Me lo deben');
     await _waitFor(tester, find.widgetWithText(ChoiceChip, 'Comercial Andina'));
     await _tap(tester, 'Comercial Andina');
+    await _tap(tester, 'Boleta');
+    await tester.enterText(find.widgetWithText(TextField, 'Serie'), 'b001');
+    await tester.enterText(find.widgetWithText(TextField, 'Número'), '1');
+    await tester.pump();
     await _tap(tester, 'Guardar');
     await _waitFor(tester, find.text('¡Listo, quedó anotado!'));
     await _tap(tester, 'Listo');
     await _waitFor(tester, find.text('Tus últimos meses'));
     await _shot(tester, '8-inicio-grafico');
+
+    // La boleta quedó en el registro de ventas del servidor, con la serie en mayúsculas.
+    await _tap(tester, 'Movimientos');
+    await _tap(tester, 'Registros de ventas y compras');
+    await _waitFor(tester, find.text('Boleta B001-1'));
+    expect(find.textContaining('Comercial Andina'), findsOneWidget);
+    expect(find.text('IGV S/ 36.00'), findsOneWidget);
+    await _shot(tester, '9a-registro-de-ventas');
+    await tester.tap(find.byTooltip('Atrás'));
+    await _settle(tester);
 
     await _tap(tester, 'Clientes');
     await _waitFor(tester, find.text('S/ 236.00'));

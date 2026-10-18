@@ -15,9 +15,10 @@ import { apiError, uuidParam, ZodPipe } from '../common/http.js';
 import { AccountsService } from './accounts.service.js';
 import { MAX_LINES_PER_ENTRY } from './journal-rules.js';
 import { JournalService } from './journal.service.js';
-import { isValidDate, limaDate } from './lima.js';
+import { isValidDate, limaDate, periodRange } from './lima.js';
 import { OperationsService } from './operations.service.js';
 import { PeriodsService } from './periods.service.js';
+import { RegistersService } from './registers.service.js';
 import { ReportsService } from './reports.service.js';
 
 const date = z.string().refine(isValidDate, 'Usa el formato AAAA-MM-DD');
@@ -76,6 +77,18 @@ const operationBody = z.object({
   ]),
   date: date.optional(),
   reference: z.string().trim().min(1).max(40).optional(),
+  document: z
+    .object({
+      type: z.enum(['01', '02', '03', '12', '00']),
+      series: z.string().trim().min(1).max(24),
+      number: z.number().int(),
+      counterpartyRuc: z
+        .string()
+        .regex(/^\d{11}$/, 'El RUC tiene 11 dígitos')
+        .optional(),
+      counterpartyName: z.string().trim().min(2).max(120).optional(),
+    })
+    .optional(),
   moneyAccountCode: accountCode.optional(),
   contactId: z.uuid().optional(),
 });
@@ -108,7 +121,26 @@ export class AccountingController {
     @Inject(ReportsService) private readonly reports: ReportsService,
     @Inject(PeriodsService) private readonly periods: PeriodsService,
     @Inject(OperationsService) private readonly operations: OperationsService,
+    @Inject(RegistersService) private readonly registers: RegistersService,
   ) {}
+
+  /** Registro de ventas o de compras del mes, con los comprobantes. */
+  @Get('registers/:kind')
+  register(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Param('kind', new ZodPipe(z.enum(['sales', 'purchases']))) kind: 'sales' | 'purchases',
+    @Query(new ZodPipe(summaryQuery)) query: z.infer<typeof summaryQuery>,
+  ) {
+    const { from, to } = periodRange(query.period ?? limaDate(new Date()).slice(0, 7));
+    return this.registers.register(
+      companyId,
+      auth.userId,
+      kind === 'sales' ? 'sale' : 'purchase',
+      from,
+      to,
+    );
+  }
 
   /** «Vendí», «gasté», «cobré», «pagué»: el asiento se arma solo. */
   @Post('operations')
