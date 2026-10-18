@@ -10,15 +10,14 @@ import { BRAND, FAVICON, markSvg } from '../web/brand.js';
  */
 const STYLE = `
   :root { color-scheme: light; --ink:${BRAND.ink}; --ink2:${BRAND.ink2}; --paper:${BRAND.paper};
-    --brand:${BRAND.green}; --line:rgba(18,38,30,.12); --red:#B42318; --green:${BRAND.green}; }
+    --brand:${BRAND.terracotta}; --line:rgba(30,34,53,.12); --red:${BRAND.red}; --green:${BRAND.green}; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background: var(--paper); color: var(--ink); }
   main { max-width: 460px; margin: 0 auto; padding: 20px 16px 32px; display: grid; gap: 14px; }
   header { display:flex; align-items:center; gap:10px; }
-  .logo { width:38px; height:38px; border-radius:9px; background:var(--brand); display:grid;
-    place-items:center; flex: none; }
-  .logo svg { width:78%; height:78%; }
+  .logo { width:40px; height:40px; display:block; flex: none; }
+  .logo svg { width:100%; height:100%; display:block; }
   .muted { color: var(--ink2); font-size: 15px; margin: 0; }
   .card { background:#fff; border:1px solid var(--line); border-radius:20px; padding:18px; }
   .amount { font-size: 40px; font-weight: 800; margin: 4px 0 8px; letter-spacing: -0.5px; }

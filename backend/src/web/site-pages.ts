@@ -10,30 +10,33 @@ export function publicPrice(cents: number): string {
 export const HOME_PAGE: WebPage = renderPage({
   title: 'Contabilidad fácil para tu negocio',
   description:
-    'Anota tus ventas y gastos como en un cuaderno y Contabili hace la contabilidad por ti: IGV, libros y el resumen de tu negocio.',
+    'Anota tus ventas y gastos como en un cuaderno y Contabili hace la contabilidad por ti: IGV, impuestos del mes y el resumen de tu negocio.',
   indexable: true,
   body: `
-  <h1>Tu contabilidad, tan fácil como anotar una venta</h1>
-  <p class="lead">Dile a Contabili qué pasó en tu negocio —«vendí», «gasté», «cobré», «pagué»— y él arma los asientos, separa el IGV y te dice cómo vas. Sin saber de debe ni haber.</p>
-  <div class="actions">
-    <a class="btn" href="/descargas">Pruébalo gratis ${TRIAL_DAYS} días</a>
-    <a class="btn ghost" href="/precios">Ver precios</a>
-  </div>
-  <p class="muted spaced">Sin tarjeta para probar. En el celular y en la computadora.</p>
+  <section class="hero">
+    <span class="beta">Beta abierta</span>
+    <h1>Tu contabilidad, tan fácil como <em>anotar una venta</em></h1>
+    <p class="lead">Dile a Contabili qué pasó en tu negocio —«vendí», «gasté», «cobré», «pagué»— y él arma los asientos, separa el IGV, calcula tus impuestos del mes y te dice cómo vas. Sin saber de debe ni haber.</p>
+    <div class="actions">
+      <a class="btn" href="/descargas">Pruébalo gratis ${TRIAL_DAYS} días</a>
+      <a class="btn ghost" href="/precios">Ver precios</a>
+    </div>
+    <p class="muted spaced">Sin tarjeta para probar. En el celular y en la computadora.</p>
+  </section>
 
   <h2>Así de simple</h2>
   <ol class="steps">
     <li><strong>Descarga e ingresa con tu celular.</strong> Te llega un código por SMS; no hay contraseñas que recordar.</li>
     <li><strong>Anota lo que pasó, con tus palabras.</strong> «Vendí S/ 118 al contado», «pagué la luz con factura». El IGV se calcula solo según tu régimen.</li>
-    <li><strong>Mira cómo va tu negocio.</strong> Cuánta plata tienes, cuánto te deben, cuánto debes, el IGV del mes y si ganaste o perdiste.</li>
+    <li><strong>Mira cómo va tu negocio.</strong> Cuánta plata tienes, quién te debe, a quién le debes, cuánto pagarás a SUNAT este mes y si ganaste o perdiste.</li>
   </ol>
 
   <h2>Hecho para negocios del Perú</h2>
   <div class="grid pairs">
-    <section class="card"><h3>Tu régimen, sin enredos</h3><p>Nuevo RUS, RER, MYPE Tributario o General: Contabili sabe cuándo va IGV y cuándo una factura te ayuda a pagar menos.</p></section>
-    <section class="card"><h3>Libros en orden</h3><p>Plan Contable General Empresarial, libro diario, mayor y balance de comprobación. Cada mes se cierra y nadie lo cambia sin dejar constancia.</p></section>
-    <section class="card"><h3>Tu contador, a tu lado</h3><p>Invita a tu contador o a tu equipo con su celular. Tú decides quién registra y quién solo mira.</p></section>
-    <section class="card"><h3>Tus datos son tuyos</h3><p>Si tu plan vence, sigues viendo todo lo que registraste. Nunca borramos tu información por falta de pago.</p></section>
+    <section class="card"><div class="icon" aria-hidden="true">%</div><h3>Tus impuestos del mes</h3><p>IGV con tu saldo a favor y pago a cuenta de renta según tu régimen: Nuevo RUS, RER, MYPE Tributario o General.</p></section>
+    <section class="card"><div class="icon" aria-hidden="true">≡</div><h3>Libros en orden</h3><p>Plan Contable General Empresarial, libro diario, mayor y balance de comprobación, listos para tu contador en Excel.</p></section>
+    <section class="card"><div class="icon" aria-hidden="true">☺</div><h3>Quién te debe</h3><p>Anota a tus clientes y proveedores: Contabili te dice cuánto te debe cada uno y cuánto debes tú.</p></section>
+    <section class="card"><div class="icon" aria-hidden="true">✓</div><h3>Tus datos son tuyos</h3><p>Si tu plan vence, sigues viendo todo lo que registraste. Nunca borramos tu información por falta de pago.</p></section>
   </div>
 
   <h2>¿Listo para ordenar tus cuentas?</h2>
@@ -62,8 +65,11 @@ export const PRICING_PAGE: WebPage = renderPage({
   description: `Planes de Contabili por empresa, con ${TRIAL_DAYS} días gratis. Paga con Yape o tarjeta.`,
   indexable: true,
   body: `
-  <h1>Precios simples, por empresa</h1>
-  <p class="lead">Empieza con ${TRIAL_DAYS} días gratis del plan completo, sin tarjeta. Después eliges el plan que te queda. Precios con IGV incluido.</p>
+  <section class="hero">
+    <h1>Precios simples, <em>por empresa</em></h1>
+    <p class="lead">Empieza con ${TRIAL_DAYS} días gratis del plan completo, sin tarjeta. Después eliges el plan que te queda. Precios con IGV incluido.</p>
+  </section>
+  <div class="spaced"></div>
   <div class="grid">
     ${PLAN_CODES.map((code) => {
       const plan = PLANS[code];
@@ -113,11 +119,14 @@ export function downloadsPage(links: DownloadLinks): WebPage {
     description: 'Descarga Contabili para tu computadora o tu celular.',
     indexable: true,
     body: `
-  <h1>Descarga Contabili</h1>
-  <p class="lead">Instálalo donde te quede más cómodo. Entras con tu celular y ves lo mismo en todos tus dispositivos.</p>
+  <section class="hero">
+    <span class="beta">Beta abierta</span>
+    <h1>Descarga <em>Contabili</em></h1>
+    <p class="lead">Instálalo donde te quede más cómodo. Entras con tu celular y ves lo mismo en todos tus dispositivos.</p>
+  </section>
   ${
     none
-      ? `<section class="card"><p>Estamos preparando las primeras versiones para descargar. Vuelve pronto a esta página.</p></section>`
+      ? `<section class="card spaced"><p>Contabili está en beta: estamos preparando las versiones para descargar. Vuelve pronto a esta página.</p></section>`
       : ''
   }
   ${desktop ? `<h2>Para tu computadora${links.version ? ` <small class="muted">versión ${escapeHtml(links.version)}</small>` : ''}</h2><div class="grid">${desktop}</div>` : ''}

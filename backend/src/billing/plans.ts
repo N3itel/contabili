@@ -26,9 +26,10 @@ export interface Plan {
 
 const COMMON = [
   'Registra ventas, gastos, cobros y pagos sin saber de contabilidad',
-  'IGV calculado según tu régimen',
-  'Resumen del mes: cuánta plata tienes, cuánto te deben y cuánto debes',
-  'Libro diario, mayor y balance de comprobación',
+  'Impuestos del mes: IGV y renta según tu régimen',
+  'Clientes y proveedores: quién te debe y a quién le debes',
+  'Resumen del mes y gráfico de tus ventas y gastos',
+  'Libro diario, mayor y balance, descargables en Excel',
   'En el celular y en la computadora (Windows, Mac y Linux)',
 ];
 

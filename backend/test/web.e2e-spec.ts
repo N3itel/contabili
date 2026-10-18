@@ -32,6 +32,15 @@ describe('sitio público (e2e)', () => {
     },
   );
 
+  it('sirve su propia letra, sin recursos de terceros', async () => {
+    const res = await t.web.get('/fonts/figtree.ttf').expect(200);
+    expect(res.headers['content-type']).toBe('font/ttf');
+    expect(res.headers['cache-control']).toContain('immutable');
+    // El archivo tal cual (un TTF empieza con 00 01 00 00), no convertido a JSON.
+    expect(Number(res.headers['content-length'])).toBe(62712);
+    expect((res.body as Buffer).subarray(0, 4)).toEqual(Buffer.from([0, 1, 0, 0]));
+  });
+
   it('los precios salen de los planes', async () => {
     const res = await t.web.get('/precios').expect(200);
     expect(res.text).toContain('S/ 25');

@@ -10,7 +10,7 @@ describe('sitio', () => {
 
   it('descargas: solo las publicadas, sin botones vacíos', () => {
     const empty = downloadsPage(none).html;
-    expect(empty).toContain('Estamos preparando');
+    expect(empty).toContain('estamos preparando');
     expect(empty).not.toContain('Descargar para');
 
     const some = downloadsPage({
