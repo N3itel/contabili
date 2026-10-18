@@ -12,7 +12,9 @@ import {
 import { z } from 'zod';
 import { type AuthContext, CurrentAuth, Public } from '../auth/auth.guard.js';
 import { uuidParam, ZodPipe } from '../common/http.js';
+import { ExportsService } from '../accounting/exports.service.js';
 import { BillingService } from './billing.service.js';
+import { ReceiptsService } from './receipts.service.js';
 import { CHECKOUT_PAGE_CSP, CHECKOUT_PAGE_HTML } from './checkout-page.js';
 
 const orderBody = z.object({
@@ -56,11 +58,29 @@ const webhookBody = z.looseObject({
 /** El plan de una empresa, desde la app o desde Mi plan. */
 @Controller('companies/:companyId/billing')
 export class BillingController {
-  constructor(@Inject(BillingService) private readonly billing: BillingService) {}
+  constructor(
+    @Inject(BillingService) private readonly billing: BillingService,
+    @Inject(ReceiptsService) private readonly receipts: ReceiptsService,
+    @Inject(ExportsService) private readonly exports: ExportsService,
+  ) {}
 
   @Get()
   status(@CurrentAuth() auth: AuthContext, @Param('companyId', uuidParam()) companyId: string) {
     return this.billing.status(companyId, auth.userId);
+  }
+
+  /** El comprobante de un pago: el PDF del proveedor o, de prueba, el nuestro (enlace de 5 min). */
+  @Post('receipts/:receiptId/link')
+  @HttpCode(HttpStatus.OK)
+  async receiptLink(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Param('receiptId', uuidParam()) receiptId: string,
+  ) {
+    // Revisa que sea parte de la empresa antes de decir nada del comprobante.
+    const link = await this.exports.einvoiceLink(companyId, auth.userId, receiptId, 'receipt');
+    const row = await this.receipts.ready(companyId, receiptId);
+    return { url: row.pdfUrl ?? link };
   }
 
   @Post('orders')

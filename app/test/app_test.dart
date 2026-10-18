@@ -182,6 +182,38 @@ void main() {
     expect(find.text('Ya pagué'), findsOneWidget);
   });
 
+  testWidgets('Mi plan: cada pago con su factura', (tester) async {
+    _largeText(tester);
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    api.payments = [
+      LicensePayment(
+        planName: 'Negocio',
+        cycle: BillingCycle.monthly,
+        amountCents: 4900,
+        paidAt: DateTime.utc(2026, 10, 17, 15),
+        periodEnd: DateTime.utc(2026, 12, 16, 17),
+        receipt: const Receipt(id: 'r2', label: null, status: ReceiptStatus.queued),
+      ),
+      LicensePayment(
+        planName: 'Negocio',
+        cycle: BillingCycle.monthly,
+        amountCents: 4900,
+        paidAt: DateTime.utc(2026, 9, 17, 15),
+        periodEnd: DateTime.utc(2026, 11, 16, 17),
+        receipt: const Receipt(id: 'r1', label: 'F001-00000010', status: ReceiptStatus.accepted),
+      ),
+    ];
+    final h = _Harness(api);
+    await h.pump(tester);
+    await _tapText(tester, 'Mi plan');
+    expect(find.text('Tus pagos'), findsOneWidget);
+    expect(find.text('Pagado el 17/10/2026 · S/ 49.00'), findsOneWidget);
+    expect(find.text('Tu factura está en camino: aparecerá aquí en unos minutos.'), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'Mi plan con letra grande');
+    await _tapText(tester, 'Factura F001-00000010');
+    expect(h.opened.single.path, '/api/v1/exports/factura-r1');
+  });
+
   testWidgets('acepta una invitación y entra a esa empresa', (tester) async {
     final api = FakeContabiliApi(signedIn: true);
     api.invitations.add(

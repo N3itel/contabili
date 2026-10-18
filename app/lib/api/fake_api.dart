@@ -22,6 +22,9 @@ class FakeContabiliApi implements ContabiliApi {
   /// Estado de la licencia que devuelve `billing` (prueba por defecto).
   License? license;
 
+  /// Pagos de la licencia que muestra Mi plan.
+  List<LicensePayment> payments = const [];
+
   /// Si se fija, la próxima operación falla con este error.
   ApiException? failNext;
 
@@ -658,6 +661,7 @@ class FakeContabiliApi implements ContabiliApi {
           features: ['Hasta 6 personas'],
         ),
       ],
+      payments: payments,
     );
   }
 
@@ -671,6 +675,12 @@ class FakeContabiliApi implements ContabiliApi {
     final uri = Uri.parse('https://contabili.pe/pagar/${_uuid()}#t=$plan-${cycle.wire}');
     orders.add(uri);
     return uri;
+  }
+
+  @override
+  Future<Uri> receiptLink(String companyId, String receiptId) async {
+    _check();
+    return Uri.parse('https://contabili.pe/api/v1/exports/factura-$receiptId');
   }
 
   @override

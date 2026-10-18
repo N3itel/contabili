@@ -22,10 +22,11 @@ Con IGV incluido. Cada empresa empieza con 30 días gratis del plan Negocio.
 | Estudio contable externo | desde S/ 50 | Persona que lleva los libros |
 | Facturadores (Nubefact, Facturalo) | S/ 25 a S/ 29 | Solo facturación electrónica |
 
-Contabili todavía no emite comprobantes electrónicos, así que se ubica por debajo
-de la contabilidad con facturación (Alegra) y a la altura de un facturador simple.
+Contabili emite comprobantes electrónicos solo en beta (con la cuenta de Nubefact
+de cada empresa, que la empresa paga aparte), así que se ubica por debajo de la
+contabilidad con facturación (Alegra) y a la altura de un facturador simple.
 Emprendedor cuesta la mitad del estudio contable más barato y la cuarta parte de
-Alegra. Cuando llegue la facturación electrónica, conviene revisar los precios.
+Alegra. Cuando la facturación electrónica salga de beta, conviene revisar los precios.
 
 ## Lo que cuesta atender una empresa (por mes)
 

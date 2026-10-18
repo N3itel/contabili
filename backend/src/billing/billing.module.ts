@@ -1,8 +1,10 @@
 import { Inject, Logger, Module, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AccountingModule } from '../accounting/accounting.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import type { Env } from '../config/env.js';
+import { type EinvoiceProvider, NubefactProvider, TestProvider } from '../einvoicing/providers.js';
 import {
   BillingController,
   CheckoutPageController,
@@ -15,6 +17,7 @@ import {
   PAYMENT_PROVIDER,
   type PaymentProvider,
 } from './payments.js';
+import { RECEIPT_PROVIDER, ReceiptsService } from './receipts.service.js';
 import { RemindersService } from './reminders.service.js';
 
 /** Cada cuánto se vencen las órdenes sin pagar. */
@@ -71,15 +74,52 @@ class ReminderSweeper implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-/** Licencias por empresa: planes, órdenes de pago, avisos y la página de pago. */
+/** Cada cuánto se emiten los comprobantes en cola y se consultan los pendientes. */
+export const RECEIPT_SWEEP_MS = 2 * 60_000;
+
+class ReceiptSweeper implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger('Comprobantes');
+  private timer?: NodeJS.Timeout;
+
+  constructor(
+    @Inject(ReceiptsService) private readonly receipts: ReceiptsService,
+    @Inject(ConfigService) private readonly config: ConfigService<Env, true>,
+  ) {}
+
+  onModuleInit(): void {
+    if (this.config.get('NODE_ENV', { infer: true }) === 'test') return;
+    this.timer = setInterval(() => {
+      this.receipts.sweep().catch((error: Error) => {
+        this.logger.warn(`Falló la emisión de comprobantes de licencia (${error.name})`);
+      });
+    }, RECEIPT_SWEEP_MS);
+    this.timer.unref();
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.timer);
+  }
+}
+
+/** Licencias por empresa: planes, órdenes de pago, comprobantes, avisos y la página de pago. */
 @Module({
-  imports: [CompaniesModule, AuthModule],
+  imports: [CompaniesModule, AuthModule, AccountingModule],
   controllers: [BillingController, PaymentsController, CheckoutPageController],
   providers: [
     BillingService,
     OrderSweeper,
     RemindersService,
     ReminderSweeper,
+    ReceiptsService,
+    ReceiptSweeper,
+    {
+      provide: RECEIPT_PROVIDER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>): EinvoiceProvider =>
+        config.get('RECEIPTS_PROVIDER', { infer: true }) === 'nubefact'
+          ? new NubefactProvider()
+          : new TestProvider(),
+    },
     {
       provide: PAYMENT_PROVIDER,
       inject: [ConfigService],

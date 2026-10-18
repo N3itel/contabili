@@ -370,15 +370,84 @@ class License {
 }
 
 class Billing {
-  const Billing({required this.license, required this.plans});
+  const Billing({required this.license, required this.plans, this.payments = const []});
 
-  factory Billing.fromJson(Json json) => Billing(
-    license: License.fromJson(json['license'] as Json),
-    plans: [for (final p in json['plans'] as List) Plan.fromJson(p as Json)],
-  );
+  factory Billing.fromJson(Json json) {
+    final plans = [for (final p in json['plans'] as List) Plan.fromJson(p as Json)];
+    return Billing(
+      license: License.fromJson(json['license'] as Json),
+      plans: plans,
+      payments: [
+        for (final o in json['orders'] as List)
+          if ((o as Json)['status'] == 'paid') LicensePayment.fromJson(o, plans),
+      ],
+    );
+  }
 
   final License license;
   final List<Plan> plans;
+
+  /// Los últimos pagos, cada uno con su comprobante.
+  final List<LicensePayment> payments;
+}
+
+/// Estado del comprobante de un pago de licencia.
+enum ReceiptStatus {
+  queued,
+  pending,
+  accepted,
+  rejected,
+  test;
+
+  /// Ya se puede ver su PDF.
+  bool get ready => this == accepted || this == test;
+}
+
+class Receipt {
+  const Receipt({required this.id, required this.label, required this.status});
+
+  factory Receipt.fromJson(Json json) => Receipt(
+    id: json['id'] as String,
+    label: json['label'] as String?,
+    status: ReceiptStatus.values.byName(json['status'] as String),
+  );
+
+  final String id;
+
+  /// «F001-00000012», o null mientras espera turno.
+  final String? label;
+  final ReceiptStatus status;
+}
+
+/// Un pago de la licencia.
+class LicensePayment {
+  const LicensePayment({
+    required this.planName,
+    required this.cycle,
+    required this.amountCents,
+    required this.paidAt,
+    required this.periodEnd,
+    this.receipt,
+  });
+
+  factory LicensePayment.fromJson(Json json, List<Plan> plans) => LicensePayment(
+    planName: plans.firstWhere((p) => p.code == json['plan'], orElse: () => plans.first).name,
+    cycle: BillingCycle.values.firstWhere((c) => c.wire == json['cycle']),
+    amountCents: json['amountCents'] as int,
+    paidAt: DateTime.parse(json['paidAt'] as String),
+    periodEnd: DateTime.parse(json['periodEnd'] as String),
+    receipt: switch (json['receipt']) {
+      final Json r => Receipt.fromJson(r),
+      _ => null,
+    },
+  );
+
+  final String planName;
+  final BillingCycle cycle;
+  final Cents amountCents;
+  final DateTime paidAt;
+  final DateTime periodEnd;
+  final Receipt? receipt;
 }
 
 class Member {

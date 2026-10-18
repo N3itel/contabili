@@ -89,6 +89,7 @@ descargas con enlace firmado (`/exports/:token`). Los montos van en céntimos (S
 | `GET /companies/:id/periods`, `POST …/periods/close` · `/reopen` | consulta · contador · dueño | Cierre mensual (reabrir pide motivo) |
 | `GET /companies/:id/billing` | consulta | Plan, días que quedan y pagos |
 | `POST /companies/:id/billing/orders` | dueño | Orden de pago: devuelve `checkoutUrl` |
+| `POST /companies/:id/billing/receipts/:id/link` | consulta | Factura de un pago de la licencia (PDF) |
 | `GET` · `PUT /companies/:id/einvoicing` | consulta · dueño | Facturación electrónica: modo de prueba o Nubefact y series |
 | `GET` · `POST /companies/:id/einvoices` | consulta · contador | Comprobantes emitidos y emitir una boleta o factura |
 | `POST /companies/:id/einvoices/:id/refresh` · `/record` · `/link` | contador · contador · consulta | Consultar a SUNAT, anotar la venta y ver el PDF |
@@ -108,7 +109,7 @@ Sin `from`/`to`, los reportes van del 1 de enero hasta hoy (hora de Lima).
 3. ~~Cierre mensual, operaciones fáciles, resumen, licencias, cobro y sitio.~~
 4. ~~App Flutter para Android, iOS, Windows, macOS y Linux.~~ Falta: instaladores
    firmados (MSIX, DMG notarizado, .deb, Play y App Store) y publicarlos en `/descargas`.
-5. ~~Avisos antes de que venza el plan.~~ Comprobante electrónico de cada pago de licencia.
+5. ~~Avisos antes de que venza el plan y factura electrónica de cada pago de licencia.~~
 6. ~~Registro de ventas y de compras desde comprobantes; exportar a PDF.~~
 7. ~~Facturación electrónica (beta, con Nubefact) y notas de crédito.~~ Nuevo RUS (hoy solo de
    prueba) y libros electrónicos PLE.

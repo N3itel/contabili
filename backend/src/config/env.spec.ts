@@ -35,6 +35,9 @@ describe('variables de entorno', () => {
       COMPANY_LEGAL_NAME: 'Contabili SAC',
       COMPANY_RUC: '20131312955',
       SUPPORT_EMAIL: 'soporte@contabili.pe',
+      RECEIPTS_PROVIDER: 'nubefact',
+      RECEIPTS_NUBEFACT_URL: 'https://api.nubefact.com/api/v1/abc-123',
+      RECEIPTS_NUBEFACT_TOKEN: 'token-de-nubefact-123',
     };
     expect(() => validateEnv(prod)).toThrow(/PAYMENTS_PROVIDER/);
     const culqi = {
@@ -50,6 +53,24 @@ describe('variables de entorno', () => {
       validateEnv({ ...culqi, CULQI_PUBLIC_KEY: 'pk_live_abc', CULQI_SECRET_KEY: 'sk_live_abc' })
         .PAYMENTS_PROVIDER,
     ).toBe('culqi');
+  });
+
+  it('en producción los comprobantes de las licencias salen por Nubefact', () => {
+    const prod = {
+      ...base,
+      NODE_ENV: 'production',
+      AUTH_JWT_SECRET: 's'.repeat(40),
+      COMPANY_RUC: '20131312955',
+    };
+    expect(() => validateEnv(prod)).toThrow(/RECEIPTS_PROVIDER/);
+    expect(() => validateEnv({ ...base, RECEIPTS_PROVIDER: 'nubefact' })).toThrow(
+      /RECEIPTS_NUBEFACT_TOKEN/,
+    );
+    // Solo rutas de Nubefact: el servidor no llama a direcciones inventadas.
+    expect(() =>
+      validateEnv({ ...base, RECEIPTS_NUBEFACT_URL: 'https://169.254.169.254/latest' }),
+    ).toThrow(/RUTA/);
+    expect(validateEnv(base).RECEIPTS_SERIES).toBe('F001');
   });
 
   it('las descargas van por https', () => {

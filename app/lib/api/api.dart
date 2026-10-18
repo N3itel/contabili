@@ -91,6 +91,9 @@ abstract interface class ContabiliApi {
   /// Crea la orden de pago y devuelve la dirección de la página de pago.
   Future<Uri> createOrder(String companyId, {required String plan, required BillingCycle cycle});
 
+  /// Dónde ver el comprobante de un pago de la licencia.
+  Future<Uri> receiptLink(String companyId, String receiptId);
+
   Future<List<Member>> members(String companyId);
   Future<void> invite(String companyId, {required String phone, required Role role});
   Future<void> removeMember(String companyId, String userId);

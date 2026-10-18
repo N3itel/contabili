@@ -14,6 +14,7 @@ import {
   einvoices,
   journalEntries,
   journalLines,
+  licenseReceipts,
 } from '../db/schema/index.js';
 import { CSV_BOM, csvAmount, csvRow, csvText } from './csv.js';
 import { formatDate, limaDate } from './lima.js';
@@ -62,11 +63,14 @@ interface ExportClaims {
   to: string;
 }
 
-/** Enlace a la representación impresa de un comprobante electrónico. */
+/**
+ * Enlace a la representación impresa de un comprobante electrónico: uno que
+ * emitió la empresa o el de un pago de su licencia.
+ */
 interface EinvoiceClaims {
   userId: string;
   companyId: string;
-  kind: 'einvoice';
+  kind: 'einvoice' | 'receipt';
   einvoiceId: string;
 }
 
@@ -92,6 +96,8 @@ const linkExpired = () =>
 export class ExportsService {
   private readonly key: Uint8Array;
   private readonly publicUrl: string;
+  /** Quien vende Contabili: emite los comprobantes de las licencias. */
+  private readonly seller: { ruc: string; legalName: string };
 
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
@@ -102,6 +108,10 @@ export class ExportsService {
   ) {
     this.key = new Uint8Array(deriveKey(config.get('AUTH_JWT_SECRET', { infer: true }), 'export'));
     this.publicUrl = config.get('PUBLIC_WEB_URL', { infer: true });
+    this.seller = {
+      ruc: config.get('COMPANY_RUC', { infer: true }) ?? '—',
+      legalName: config.get('COMPANY_LEGAL_NAME', { infer: true }),
+    };
   }
 
   async createLink(
@@ -136,11 +146,15 @@ export class ExportsService {
     };
   }
 
-  /** Archivo del enlace: nombre, tipo y contenido (CSV o PDF). */
   /** Enlace corto al PDF de un comprobante electrónico (la empresa ya se revisó). */
-  async einvoiceLink(companyId: string, actorId: string, einvoiceId: string): Promise<string> {
+  async einvoiceLink(
+    companyId: string,
+    actorId: string,
+    einvoiceId: string,
+    kind: EinvoiceClaims['kind'] = 'einvoice',
+  ): Promise<string> {
     await this.access.require(companyId, actorId, 'viewer');
-    const token = await new SignJWT({ cid: companyId, k: 'einvoice', e: einvoiceId })
+    const token = await new SignJWT({ cid: companyId, k: kind, e: einvoiceId })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(actorId)
       .setAudience(AUDIENCE)
@@ -150,6 +164,7 @@ export class ExportsService {
     return `${this.publicUrl}/api/v1/exports/${token}`;
   }
 
+  /** Archivo del enlace: nombre, tipo y contenido (CSV o PDF). */
   async download(token: string): Promise<ExportFile> {
     const claims = await this.verify(token);
     // Sacar a alguien de la empresa corta también sus enlaces aún vigentes.
@@ -158,7 +173,11 @@ export class ExportsService {
       .select({ ruc: companies.ruc, legalName: companies.legalName })
       .from(companies)
       .where(eq(companies.id, claims.companyId));
-    if (claims.kind === 'einvoice') return this.einvoiceFile(claims, company);
+    if ('einvoiceId' in claims) {
+      return claims.kind === 'receipt'
+        ? this.receiptFile(claims, company)
+        : this.einvoiceFile(claims, company);
+    }
     const range =
       claims.kind === 'monthly_report' ? claims.from.slice(0, 7) : `${claims.from}-al-${claims.to}`;
     const name = {
@@ -280,6 +299,43 @@ export class ExportsService {
     };
   }
 
+  /** Comprobante de prueba de un pago de licencia: lo emite quien vende Contabili. */
+  private async receiptFile(
+    claims: EinvoiceClaims,
+    company: { ruc: string; legalName: string },
+  ): Promise<ExportFile> {
+    const [row] = await this.db
+      .select()
+      .from(licenseReceipts)
+      .where(
+        and(
+          eq(licenseReceipts.id, claims.einvoiceId),
+          eq(licenseReceipts.companyId, claims.companyId),
+        ),
+      );
+    if (!row?.series || !row.number || !row.issueDate) throw linkExpired();
+    const label = einvoiceNumberLabel(row.series, row.number);
+    return {
+      filename: `factura-contabili-${company.ruc}-${label}.pdf`,
+      contentType: 'application/pdf',
+      body: await einvoicePdf({
+        company: this.seller,
+        type: '01',
+        series: row.series,
+        number: row.number,
+        issueDate: row.issueDate,
+        customer: { docType: 'ruc', number: row.customerRuc, name: row.customerName },
+        description: row.description,
+        base: row.baseCents,
+        igv: row.igvCents,
+        total: row.totalCents,
+        test: row.provider === 'test',
+        nrus: false,
+        hash: row.hash,
+      }),
+    };
+  }
+
   private async verify(token: string): Promise<ExportClaims | EinvoiceClaims> {
     try {
       const { payload } = await jwtVerify(token, this.key, {
@@ -288,12 +344,12 @@ export class ExportsService {
       });
       const { sub, cid, k, fm, f, t, e } = payload as Record<string, unknown>;
       if (
-        k === 'einvoice' &&
+        (k === 'einvoice' || k === 'receipt') &&
         typeof sub === 'string' &&
         typeof cid === 'string' &&
         typeof e === 'string'
       ) {
-        return { userId: sub, companyId: cid, kind: 'einvoice', einvoiceId: e };
+        return { userId: sub, companyId: cid, kind: k, einvoiceId: e };
       }
       if (
         typeof sub !== 'string' ||

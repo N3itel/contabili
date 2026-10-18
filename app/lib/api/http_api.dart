@@ -177,6 +177,12 @@ class HttpContabiliApi implements ContabiliApi {
   }
 
   @override
+  Future<Uri> receiptLink(String companyId, String receiptId) async => Uri.parse(
+    (await _json('POST', '${_company(companyId)}/billing/receipts/$receiptId/link'))['url']
+        as String,
+  );
+
+  @override
   Future<List<Contact>> contacts(String companyId, {ContactKind? kind}) async => [
     for (final c in await _list(
       'GET',

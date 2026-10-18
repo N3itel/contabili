@@ -28,6 +28,7 @@ import {
   type PlanCode,
   priceFor,
 } from './plans.js';
+import { ReceiptsService } from './receipts.service.js';
 
 type OrderRow = typeof licenseOrders.$inferSelect;
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -77,6 +78,7 @@ export class BillingService {
     @Inject(DRIZZLE) private readonly db: Database,
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
     @Inject(CompanyAccess) private readonly access: CompanyAccess,
+    @Inject(ReceiptsService) private readonly receipts: ReceiptsService,
     @Inject(ConfigService) config: ConfigService<Env, true>,
   ) {
     this.checkoutKey = deriveKey(config.get('AUTH_JWT_SECRET', { infer: true }), 'order-checkout');
@@ -98,6 +100,10 @@ export class BillingService {
       .where(eq(licenseOrders.companyId, companyId))
       .orderBy(desc(licenseOrders.createdAt))
       .limit(10);
+    const receipts = await this.receipts.forOrders(
+      companyId,
+      orders.map((o) => o.id),
+    );
     return {
       license: {
         ...state,
@@ -107,7 +113,7 @@ export class BillingService {
         maxMembers: room.max,
       },
       plans: PLAN_CODES.map((code) => PLANS[code]),
-      orders: orders.map((o) => this.view(o, now)),
+      orders: orders.map((o) => ({ ...this.view(o, now), receipt: receipts.get(o.id) ?? null })),
     };
   }
 
@@ -346,7 +352,7 @@ export class BillingService {
    * Devuelve hasta cuándo vale, o null si la orden ya estaba pagada.
    */
   private async settle(row: OrderRow, chargeId: string, now: Date): Promise<Date | null> {
-    return this.db.transaction(async (tx) => {
+    const paidThrough = await this.db.transaction(async (tx) => {
       const [license] = await tx
         .select()
         .from(companyLicenses)
@@ -375,6 +381,8 @@ export class BillingService {
         .update(companyLicenses)
         .set({ plan: row.plan, paidThrough: periodEnd })
         .where(eq(companyLicenses.companyId, row.companyId));
+      // Cada pago lleva su comprobante: se encola con el pago y sale después.
+      await this.receipts.queue(tx, { ...row, periodStart, periodEnd });
       await audit(tx, {
         actorId: row.createdBy,
         action: 'license.paid',
@@ -389,6 +397,13 @@ export class BillingService {
       });
       return periodEnd;
     });
+    if (paidThrough) {
+      // Si falla, el barrido lo reintenta: el pago ya quedó.
+      await this.receipts.issueFor(row.id, now).catch((error: Error) => {
+        this.logger.warn(`No salió el comprobante de una licencia (${error.name})`);
+      });
+    }
+    return paidThrough;
   }
 
   private async release(

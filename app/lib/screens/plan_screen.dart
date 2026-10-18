@@ -72,6 +72,15 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
+  Future<void> _openReceipt(Receipt receipt) async {
+    try {
+      final link = await widget.session.api.receiptLink(_company.id, receipt.id);
+      await widget.session.openLink(link);
+    } on ApiException catch (error) {
+      setState(() => _message = error.message);
+    }
+  }
+
   Future<void> _checkPayment() async {
     await _load();
     setState(() => _waitingPayment = false);
@@ -226,6 +235,81 @@ class _PlanScreenState extends State<PlanScreen> {
                   const SizedBox(height: 8),
                   OutlinedButton(onPressed: _checkPayment, child: const Text('Ya pagué')),
                 ],
+                if (billing.payments.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  const SectionTitle('Tus pagos'),
+                  Card(
+                    child: Column(
+                      children: [
+                        for (final (i, payment) in billing.payments.indexed) ...[
+                          if (i > 0) const Divider(indent: 76),
+                          _PaymentTile(payment: payment, onReceipt: _openReceipt),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentTile extends StatelessWidget {
+  const _PaymentTile({required this.payment, required this.onReceipt});
+
+  final LicensePayment payment;
+  final ValueChanged<Receipt> onReceipt;
+
+  @override
+  Widget build(BuildContext context) {
+    final receipt = payment.receipt;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const IconBox(
+            icon: Icons.verified_outlined,
+            color: ContabiliColors.green,
+            background: ContabiliColors.greenSoft,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Plan ${payment.planName} · ${payment.cycle == BillingCycle.monthly ? '1 mes' : '1 año'}',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                ),
+                Text(
+                  'Pagado el ${formatInstant(payment.paidAt)} · ${formatSoles(payment.amountCents)}',
+                  style: const TextStyle(fontSize: 14, color: ContabiliColors.ink2),
+                ),
+                if (receipt == null)
+                  const SizedBox.shrink()
+                else if (receipt.status.ready)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    onPressed: () => onReceipt(receipt),
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                    label: Text(
+                      receipt.status == ReceiptStatus.test
+                          ? 'Factura ${receipt.label} (de prueba)'
+                          : 'Factura ${receipt.label}',
+                    ),
+                  )
+                else
+                  Text(
+                    receipt.status == ReceiptStatus.rejected
+                        ? 'Estamos revisando tu factura; te avisaremos cuando esté lista.'
+                        : 'Tu factura está en camino: aparecerá aquí en unos minutos.',
+                    style: const TextStyle(fontSize: 14, color: ContabiliColors.amber),
+                  ),
               ],
             ),
           ),

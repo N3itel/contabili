@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isAllowedEndpoint } from '../einvoicing/providers.js';
 
 /** Solo para desarrollo y pruebas; en producción el secreto es obligatorio. */
 export const DEV_JWT_SECRET = 'solo-para-desarrollo-no-usar-en-produccion-0123456789';
@@ -48,6 +49,22 @@ export const envSchema = z
       .optional(),
     /** Va al final de la dirección del webhook en CulqiPanel: …/payments/culqi/webhook/<secreto>. */
     CULQI_WEBHOOK_SECRET: z.string().min(32, 'debe tener al menos 32 caracteres').optional(),
+
+    /**
+     * Comprobante de cada pago de licencia: una factura de quien vende
+     * Contabili al RUC de la empresa. `test`: PDF de prueba sin valor
+     * tributario (desarrollo); `nubefact`: su cuenta de Nubefact (RUTA y TOKEN).
+     */
+    RECEIPTS_PROVIDER: z.enum(['test', 'nubefact']).default('test'),
+    RECEIPTS_NUBEFACT_URL: z
+      .string()
+      .refine(isAllowedEndpoint, 'debe ser la RUTA https de Nubefact')
+      .optional(),
+    RECEIPTS_NUBEFACT_TOKEN: z.string().min(10).max(300).optional(),
+    RECEIPTS_SERIES: z
+      .string()
+      .regex(/^F[A-Z0-9]{3}$/, 'una serie de facturas: F y 3 letras o números')
+      .default('F001'),
 
     /** Datos de quien vende Contabili, para el sitio y los términos. */
     COMPANY_LEGAL_NAME: z.string().min(3).max(200).optional(),
@@ -100,6 +117,25 @@ export const envSchema = z
         path: ['PAYMENTS_PROVIDER'],
         message: 'en producción las licencias se cobran con Culqi',
       });
+    }
+    // Cada venta lleva su comprobante: en producción salen de verdad, a SUNAT.
+    if (prod && env.RECEIPTS_PROVIDER !== 'nubefact') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['RECEIPTS_PROVIDER'],
+        message: 'en producción los comprobantes de las licencias salen por Nubefact',
+      });
+    }
+    if (env.RECEIPTS_PROVIDER === 'nubefact') {
+      for (const key of [
+        'RECEIPTS_NUBEFACT_URL',
+        'RECEIPTS_NUBEFACT_TOKEN',
+        'COMPANY_RUC',
+      ] as const) {
+        if (!env[key]) {
+          ctx.addIssue({ code: 'custom', path: [key], message: 'falta para los comprobantes' });
+        }
+      }
     }
     if (prod) {
       for (const key of ['COMPANY_LEGAL_NAME', 'COMPANY_RUC', 'SUPPORT_EMAIL'] as const) {
