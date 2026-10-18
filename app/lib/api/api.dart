@@ -72,6 +72,8 @@ abstract interface class ContabiliApi {
     required String provider,
     required String facturaSeries,
     required String boletaSeries,
+    String? facturaNoteSeries,
+    String? boletaNoteSeries,
     String? endpoint,
     String? token,
   });
@@ -79,6 +81,9 @@ abstract interface class ContabiliApi {
   Future<EinvoiceResult> emitEinvoice(String companyId, EmitRequest request);
   Future<EinvoiceResult> refreshEinvoice(String companyId, String einvoiceId);
   Future<EinvoiceResult> recordEinvoice(String companyId, String einvoiceId);
+
+  /// Anula la boleta o factura con una nota de crédito por el total.
+  Future<EinvoiceResult> creditNote(String companyId, String einvoiceId, CreditReason reason);
 
   /// Dónde ver el PDF del comprobante.
   Future<Uri> einvoiceLink(String companyId, String einvoiceId);

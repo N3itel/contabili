@@ -1,5 +1,6 @@
 import {
   amountInWords,
+  creditNoteProblem,
   einvoiceAmounts,
   type EinvoiceInput,
   einvoiceNumberLabel,
@@ -95,5 +96,19 @@ describe('facturación electrónica: reglas', () => {
     expect(integerInWords(2500300)).toBe('dos millones quinientos mil trescientos');
     expect(amountInWords(11800)).toBe('SON: CIENTO DIECIOCHO CON 00/100 SOLES');
     expect(amountInWords(5)).toBe('SON: CERO CON 05/100 SOLES');
+  });
+
+  it('nota de crédito: solo de una boleta o factura que salió, se anotó y no tiene otra', () => {
+    const ok = { docType: '03' as const, status: 'accepted', recorded: true, hasNote: false };
+    expect(creditNoteProblem(ok, '01')).toBeNull();
+    expect(creditNoteProblem({ ...ok, status: 'test' }, '06')).toBeNull();
+    expect(creditNoteProblem({ ...ok, docType: '07' }, '01')).toBe('credit_note_not_einvoice');
+    expect(creditNoteProblem({ ...ok, status: 'pending' }, '01')).toBe('credit_note_not_issued');
+    expect(creditNoteProblem({ ...ok, status: 'rejected' }, '01')).toBe('credit_note_not_issued');
+    expect(creditNoteProblem({ ...ok, recorded: false }, '01')).toBe('credit_note_not_recorded');
+    expect(creditNoteProblem({ ...ok, hasNote: true }, '01')).toBe('credit_note_exists');
+    // El error en el RUC es cosa de facturas.
+    expect(creditNoteProblem(ok, '02')).toBe('credit_reason_ruc');
+    expect(creditNoteProblem({ ...ok, docType: '01' }, '02')).toBeNull();
   });
 });

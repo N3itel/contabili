@@ -387,6 +387,8 @@ class FakeContabiliApi implements ContabiliApi {
     required String provider,
     required String facturaSeries,
     required String boletaSeries,
+    String? facturaNoteSeries,
+    String? boletaNoteSeries,
     String? endpoint,
     String? token,
   }) async {
@@ -396,6 +398,8 @@ class FakeContabiliApi implements ContabiliApi {
       provider: provider,
       facturaSeries: facturaSeries.toUpperCase(),
       boletaSeries: boletaSeries.toUpperCase(),
+      facturaNoteSeries: (facturaNoteSeries ?? einvoicing.facturaNoteSeries).toUpperCase(),
+      boletaNoteSeries: (boletaNoteSeries ?? einvoicing.boletaNoteSeries).toUpperCase(),
       endpointHost: endpoint == null ? null : Uri.parse(endpoint).host,
       hasToken: token != null,
     );
@@ -467,11 +471,103 @@ class FakeContabiliApi implements ContabiliApi {
       EinvoiceResult(issued.firstWhere((e) => e.id == einvoiceId), null);
 
   @override
+  Future<EinvoiceResult> creditNote(
+    String companyId,
+    String einvoiceId,
+    CreditReason reason,
+  ) async {
+    _check();
+    final index = issued.indexWhere((e) => e.id == einvoiceId);
+    final original = issued[index];
+    if (!original.canAnnul) {
+      throw const ApiException(
+        status: 409,
+        code: 'credit_note_exists',
+        message: 'Ese comprobante ya tiene su nota de crédito.',
+      );
+    }
+    if (reason == CreditReason.wrongRuc && original.type != EinvoiceType.factura) {
+      throw const ApiException(
+        status: 400,
+        code: 'credit_reason_ruc',
+        message: 'El error en el RUC solo se corrige en una factura.',
+      );
+    }
+    final series = original.type == EinvoiceType.factura
+        ? einvoicing.facturaNoteSeries
+        : einvoicing.boletaNoteSeries;
+    final number =
+        issued
+            .where((e) => e.type == EinvoiceType.creditNote && e.label.startsWith(series))
+            .length +
+        1;
+    final label = '$series-${number.toString().padLeft(8, '0')}';
+    // Se extorna la venta y la nota queda como comprobante del extorno.
+    final sold = documents.firstWhere(
+      (d) => '${d.$3.series}-${d.$3.number.toString().padLeft(8, '0')}' == original.label,
+    );
+    final reversal = await reverseEntry(companyId, sold.$1.id);
+    documents.add((
+      reversal,
+      sold.$2,
+      OperationDocument(
+        type: DocType.creditNote,
+        series: series,
+        number: number,
+        counterpartyRuc: sold.$3.counterpartyRuc,
+        counterpartyName: sold.$3.counterpartyName,
+      ),
+      sold.$4,
+    ));
+    creditNoteModifies[reversal.id] = '${sold.$3.type.label} ${sold.$3.label}';
+    final note = Einvoice(
+      id: _uuid(),
+      type: EinvoiceType.creditNote,
+      label: label,
+      issueDate: '$period-17',
+      status: EinvoiceStatus.test,
+      statusMessage: 'Comprobante de prueba: no se envió a SUNAT.',
+      customerDoc: original.customerDoc,
+      customerNumber: original.customerNumber,
+      customerName: original.customerName,
+      description: original.description,
+      base: original.base,
+      igv: original.igv,
+      total: original.total,
+      recorded: true,
+      modifies: (type: original.type, label: original.label),
+      creditReason: reason,
+    );
+    issued[index] = Einvoice(
+      id: original.id,
+      type: original.type,
+      label: original.label,
+      issueDate: original.issueDate,
+      status: original.status,
+      statusMessage: original.statusMessage,
+      customerDoc: original.customerDoc,
+      customerNumber: original.customerNumber,
+      customerName: original.customerName,
+      description: original.description,
+      base: original.base,
+      igv: original.igv,
+      total: original.total,
+      recorded: original.recorded,
+      creditNote: (label: label, status: EinvoiceStatus.test),
+    );
+    issued.add(note);
+    return EinvoiceResult(note, null);
+  }
+
+  @override
   Future<Uri> einvoiceLink(String companyId, String einvoiceId) async =>
       Uri.parse('https://contabili.pe/api/v1/exports/comprobante-de-prueba');
 
   /// Comprobantes registrados: asiento, operación, comprobante e IGV.
   final List<(JournalEntry, Operation, OperationDocument, int)> documents = [];
+
+  /// Notas de crédito: el extorno que la lleva → lo que anula.
+  final Map<String, String> creditNoteModifies = {};
 
   @override
   Future<Register> documentRegister(
@@ -480,9 +576,9 @@ class FakeContabiliApi implements ContabiliApi {
     required String period,
   }) async {
     _check();
-    final reversed = {
+    final reversalOf = {
       for (final e in [...?_entries[companyId]])
-        if (e.reversesEntryId != null) e.reversesEntryId!,
+        if (e.reversesEntryId != null) e.reversesEntryId!: e.id,
     };
     final rows = [
       for (final (entry, operation, doc, igv) in documents)
@@ -495,10 +591,14 @@ class FakeContabiliApi implements ContabiliApi {
             number: doc.number,
             counterpartyRuc: doc.counterpartyRuc,
             counterpartyName: doc.counterpartyName,
-            base: operation.total - igv,
-            igv: igv,
-            total: operation.total,
-            annulled: reversed.contains(entry.id),
+            base: (doc.type == DocType.creditNote ? -1 : 1) * (operation.total - igv),
+            igv: (doc.type == DocType.creditNote ? -1 : 1) * igv,
+            total: (doc.type == DocType.creditNote ? -1 : 1) * operation.total,
+            // Anulado a mano; con nota de crédito, suma y la nota resta.
+            annulled:
+                reversalOf.containsKey(entry.id) &&
+                !creditNoteModifies.containsKey(reversalOf[entry.id]),
+            modifies: creditNoteModifies[entry.id],
           ),
     ];
     final valid = rows.where((r) => !r.annulled);

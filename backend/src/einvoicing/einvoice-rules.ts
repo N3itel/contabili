@@ -10,9 +10,23 @@ import { isValidRuc } from '../tax/ruc.js';
  */
 
 export type EinvoiceType = '01' | '03';
-export const EINVOICE_TYPES: Readonly<Record<EinvoiceType, string>> = {
+/** Lo que se guarda: boletas, facturas y las notas de crédito que las anulan (07). */
+export type EinvoiceDocType = EinvoiceType | '07';
+export const EINVOICE_TYPES: Readonly<Record<EinvoiceDocType, string>> = {
   '01': 'Factura electrónica',
   '03': 'Boleta de venta electrónica',
+  '07': 'Nota de crédito electrónica',
+};
+
+/**
+ * Motivos de una nota de crédito que anula todo el comprobante (catálogo 09
+ * de SUNAT). Las notas por una parte del monto no van en la beta.
+ */
+export type CreditReason = '01' | '02' | '06';
+export const CREDIT_REASONS: Readonly<Record<CreditReason, string>> = {
+  '01': 'Anulación de la operación',
+  '02': 'Anulación por error en el RUC',
+  '06': 'Devolución total',
 };
 
 /** Documento de quien compra: RUC, DNI o ninguno («clientes varios», solo en boletas chicas). */
@@ -64,9 +78,45 @@ export function einvoiceProblem(input: EinvoiceInput, regime: TaxRegime): Einvoi
   return null;
 }
 
-/** Series electrónicas: F y 3 letras o números para facturas, B para boletas (F001, B001). */
+/**
+ * Series electrónicas: F y 3 letras o números para facturas, B para boletas
+ * (F001, B001). La nota de crédito de una factura también va con F (FC01) y
+ * la de una boleta, con B (BC01).
+ */
 export function isValidEinvoiceSeries(type: EinvoiceType, series: string): boolean {
   return new RegExp(`^${type === '01' ? 'F' : 'B'}[A-Z0-9]{3}$`).test(series);
+}
+
+export type CreditNoteProblem =
+  | 'credit_note_not_einvoice'
+  | 'credit_note_not_issued'
+  | 'credit_note_not_recorded'
+  | 'credit_note_exists'
+  | 'credit_reason_ruc';
+
+export const CREDIT_NOTE_PROBLEM_MESSAGES: Readonly<Record<CreditNoteProblem, string>> = {
+  credit_note_not_einvoice: 'Solo se anula con nota de crédito una boleta o una factura.',
+  credit_note_not_issued:
+    'Ese comprobante no salió (está pendiente o SUNAT lo rechazó): no hace falta anularlo.',
+  credit_note_not_recorded:
+    'Primero anota la venta de ese comprobante («Anotar la venta») y después anúlalo.',
+  credit_note_exists: 'Ese comprobante ya tiene su nota de crédito.',
+  credit_reason_ruc: 'El error en el RUC solo se corrige en una factura.',
+};
+
+/** Revisa si se puede anular el comprobante con una nota de crédito; null si se puede. */
+export function creditNoteProblem(
+  original: { docType: EinvoiceDocType; status: string; recorded: boolean; hasNote: boolean },
+  reason: CreditReason,
+): CreditNoteProblem | null {
+  if (original.docType === '07') return 'credit_note_not_einvoice';
+  if (original.status !== 'accepted' && original.status !== 'test') {
+    return 'credit_note_not_issued';
+  }
+  if (!original.recorded) return 'credit_note_not_recorded';
+  if (original.hasNote) return 'credit_note_exists';
+  if (reason === '02' && original.docType !== '01') return 'credit_reason_ruc';
+  return null;
 }
 
 /** Base e IGV del total, con la misma regla de todo Contabili (`tax/igv.ts`). */

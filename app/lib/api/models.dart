@@ -594,6 +594,7 @@ class RegisterRow {
     required this.igv,
     required this.total,
     required this.annulled,
+    this.modifies,
   });
 
   factory RegisterRow.fromJson(Json json) => RegisterRow(
@@ -608,6 +609,11 @@ class RegisterRow {
     igv: json['igv'] as int,
     total: json['total'] as int,
     annulled: json['annulled'] as bool,
+    modifies: switch (json['modifies']) {
+      final Json m =>
+        '${DocType.fromWire(m['docType'] as String).label} ${m['series']}-${m['number']}',
+      _ => null,
+    },
   );
 
   final String entryId;
@@ -621,6 +627,9 @@ class RegisterRow {
   final Cents igv;
   final Cents total;
   final bool annulled;
+
+  /// Nota de crédito: lo que anula («Boleta B001-45»). Sus montos vienen en negativo.
+  final String? modifies;
 
   String get label => '$series-$number';
 }
@@ -651,6 +660,8 @@ class EinvoiceSettings {
     this.provider = 'test',
     this.facturaSeries = 'F001',
     this.boletaSeries = 'B001',
+    this.facturaNoteSeries = 'FC01',
+    this.boletaNoteSeries = 'BC01',
     this.endpointHost,
     this.hasToken = false,
   });
@@ -661,6 +672,8 @@ class EinvoiceSettings {
           provider: json['provider'] as String,
           facturaSeries: json['facturaSeries'] as String,
           boletaSeries: json['boletaSeries'] as String,
+          facturaNoteSeries: json['facturaNoteSeries'] as String,
+          boletaNoteSeries: json['boletaNoteSeries'] as String,
           endpointHost: json['endpointHost'] as String?,
           hasToken: json['hasToken'] as bool,
         )
@@ -672,6 +685,10 @@ class EinvoiceSettings {
   final String provider;
   final String facturaSeries;
   final String boletaSeries;
+
+  /// Series de las notas de crédito de facturas (F…) y de boletas (B…).
+  final String facturaNoteSeries;
+  final String boletaNoteSeries;
   final String? endpointHost;
   final bool hasToken;
 
@@ -680,13 +697,30 @@ class EinvoiceSettings {
 
 enum EinvoiceType {
   boleta('03', 'Boleta'),
-  factura('01', 'Factura');
+  factura('01', 'Factura'),
+
+  /// Anula una boleta o factura emitida (no se emite sola).
+  creditNote('07', 'Nota de crédito');
 
   const EinvoiceType(this.wire, this.label);
   final String wire;
   final String label;
 
-  static EinvoiceType fromWire(String wire) => wire == '01' ? factura : boleta;
+  static EinvoiceType fromWire(String wire) => values.firstWhere((t) => t.wire == wire);
+}
+
+/// Por qué se anula con nota de crédito (catálogo 09 de SUNAT).
+enum CreditReason {
+  operation('01', 'Anulación de la operación', 'Se canceló la venta o se emitió por error.'),
+  wrongRuc('02', 'Error en el RUC', 'La factura salió con el RUC equivocado.'),
+  fullReturn('06', 'Devolución total', 'Te devolvieron todo lo que vendiste.');
+
+  const CreditReason(this.wire, this.label, this.hint);
+  final String wire;
+  final String label;
+  final String hint;
+
+  static CreditReason fromWire(String wire) => values.firstWhere((r) => r.wire == wire);
 }
 
 enum CustomerDoc {
@@ -731,10 +765,16 @@ class Einvoice {
     required this.igv,
     required this.total,
     required this.recorded,
+    this.modifies,
+    this.creditReason,
+    this.creditNote,
   });
 
   factory Einvoice.fromJson(Json json) {
     final customer = json['customer'] as Json;
+    final modifies = json['modifies'] as Json?;
+    final reason = json['creditReason'] as Json?;
+    final note = json['creditNote'] as Json?;
     return Einvoice(
       id: json['id'] as String,
       type: EinvoiceType.fromWire(json['type'] as String),
@@ -750,6 +790,19 @@ class Einvoice {
       igv: json['igv'] as int,
       total: json['total'] as int,
       recorded: json['recorded'] as bool,
+      modifies: modifies == null
+          ? null
+          : (
+              type: EinvoiceType.fromWire(modifies['type'] as String),
+              label: modifies['label'] as String,
+            ),
+      creditReason: reason == null ? null : CreditReason.fromWire(reason['code'] as String),
+      creditNote: note == null
+          ? null
+          : (
+              label: note['label'] as String,
+              status: EinvoiceStatus.fromWire(note['status'] as String),
+            ),
     );
   }
 
@@ -769,11 +822,22 @@ class Einvoice {
   final Cents igv;
   final Cents total;
 
-  /// La venta ya está anotada en los libros.
+  /// La venta ya está anotada en los libros (en una nota de crédito: extornada).
   final bool recorded;
 
-  bool get canRecord =>
-      !recorded && (status == EinvoiceStatus.accepted || status == EinvoiceStatus.test);
+  /// Nota de crédito: lo que anula (boleta B001-00000045) y por qué.
+  final ({EinvoiceType type, String label})? modifies;
+  final CreditReason? creditReason;
+
+  /// Boleta o factura: la nota de crédito que la anula (salió o está en trámite).
+  final ({String label, EinvoiceStatus status})? creditNote;
+
+  bool get issued => status == EinvoiceStatus.accepted || status == EinvoiceStatus.test;
+
+  bool get canRecord => !recorded && issued;
+
+  /// Se puede anular: salió, se anotó y no tiene nota de crédito.
+  bool get canAnnul => type != EinvoiceType.creditNote && issued && recorded && creditNote == null;
 }
 
 /// Lo que devuelve emitir: el comprobante y, si no se pudo anotar la venta, por qué.

@@ -28,6 +28,7 @@ const SHORT_DOC: Readonly<Record<string, string>> = {
   '02': 'Recibo honorarios',
   '12': 'Ticket',
   '00': 'Otro',
+  '07': 'Nota de crédito',
 };
 
 const soles = formatSoles;
@@ -139,7 +140,11 @@ export function registerPdf(company: PdfCompany, register: RegisterDto): Promise
     ],
     register.rows.map((r) => [
       formatDate(r.issueDate),
-      `${SHORT_DOC[r.docType]} ${r.series}-${r.number}${r.annulled ? ' (anulado)' : ''}`,
+      `${SHORT_DOC[r.docType]} ${r.series}-${r.number}${r.annulled ? ' (anulado)' : ''}${
+        r.modifies
+          ? `\nanula ${SHORT_DOC[r.modifies.docType]} ${r.modifies.series}-${r.modifies.number}`
+          : ''
+      }`,
       [r.counterpartyName, r.counterpartyRuc ? `RUC ${r.counterpartyRuc}` : null]
         .filter(Boolean)
         .join('\n') || '—',
@@ -161,6 +166,9 @@ export function registerPdf(company: PdfCompany, register: RegisterDto): Promise
   );
   if (register.rows.some((r) => r.annulled)) {
     pdf.note('Los comprobantes anulados (su asiento se extornó) figuran en gris y no suman.');
+  }
+  if (register.rows.some((r) => r.modifies)) {
+    pdf.note('Las notas de crédito restan: anulan la boleta o factura que se indica.');
   }
   if (register.truncated) pdf.note('Hay más comprobantes: descarga un rango de fechas más corto.');
   return pdf.finish();

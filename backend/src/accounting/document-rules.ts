@@ -22,6 +22,19 @@ export const DOCUMENT_TYPES: Readonly<
 
 export const DOCUMENT_TYPE_CODES = Object.keys(DOCUMENT_TYPES) as DocumentType[];
 
+/**
+ * En los registros figura también la nota de crédito (07): solo sale de la
+ * facturación electrónica, va en el extorno de la venta que anula y resta.
+ */
+export type RegisterDocType = DocumentType | '07';
+export const REGISTER_DOC_LABELS: Readonly<Record<RegisterDocType, string>> = {
+  ...(Object.fromEntries(DOCUMENT_TYPE_CODES.map((c) => [c, DOCUMENT_TYPES[c].label])) as Record<
+    DocumentType,
+    string
+  >),
+  '07': 'Nota de crédito',
+};
+
 /** Número correlativo: hasta 8 dígitos, como en los comprobantes electrónicos. */
 export const MAX_DOCUMENT_NUMBER = 99_999_999;
 

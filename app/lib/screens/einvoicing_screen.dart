@@ -78,6 +78,36 @@ class _EinvoicingScreenState extends State<EinvoicingScreen> {
     }
   }
 
+  /// Anular con nota de crédito: elegir el motivo y confirmar (no se deshace).
+  Future<void> _annul(Einvoice e) async {
+    final reason = await showModalBottomSheet<CreditReason>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _AnnulSheet(einvoice: e),
+    );
+    if (reason == null || !mounted) return;
+    try {
+      final result = await _api.creditNote(_company.id, e.id, reason);
+      final note = result.einvoice;
+      setState(
+        () => _notice =
+            result.recordError ??
+            switch (note.status) {
+              EinvoiceStatus.accepted || EinvoiceStatus.test =>
+                'Listo: emitiste la nota de crédito ${note.label} y la venta se descontó de tus libros.',
+              EinvoiceStatus.pending =>
+                'La nota de crédito ${note.label} espera a SUNAT: consúltala en un momento.',
+              EinvoiceStatus.rejected =>
+                'SUNAT rechazó la nota de crédito ${note.label}: ${note.statusMessage ?? 'revisa los datos'}.',
+            },
+      );
+      if (note.recorded) widget.changes?.value++;
+      await _load();
+    } on ApiException catch (error) {
+      setState(() => _notice = error.message);
+    }
+  }
+
   Future<void> _retry(Einvoice e, {required bool record}) async {
     try {
       final result = record
@@ -87,7 +117,9 @@ class _EinvoicingScreenState extends State<EinvoicingScreen> {
         () => _notice =
             result.recordError ??
             (result.einvoice.recorded
-                ? 'Listo: la venta quedó anotada.'
+                ? (result.einvoice.type == EinvoiceType.creditNote
+                      ? 'Listo: la venta quedó descontada de tus libros.'
+                      : 'Listo: la venta quedó anotada.')
                 : result.einvoice.statusMessage ?? result.einvoice.status.label),
       );
       if (result.einvoice.recorded) widget.changes?.value++;
@@ -172,7 +204,12 @@ class _EinvoicingScreenState extends State<EinvoicingScreen> {
                                     onRefresh: e.status == EinvoiceStatus.pending
                                         ? () => _retry(e, record: false)
                                         : null,
-                                    onRecord: e.canRecord ? () => _retry(e, record: true) : null,
+                                    onRecord: e.canRecord && _company.role.canRecord
+                                        ? () => _retry(e, record: true)
+                                        : null,
+                                    onAnnul: e.canAnnul && _company.role.canRecord
+                                        ? () => _annul(e)
+                                        : null,
                                   ),
                                 ],
                               ],
@@ -216,7 +253,8 @@ class _StatusCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Series: ${settings.boletaSeries} para boletas · ${settings.facturaSeries} para facturas',
+            'Series: ${settings.boletaSeries} para boletas · ${settings.facturaSeries} para facturas · '
+            '${settings.boletaNoteSeries} y ${settings.facturaNoteSeries} para sus notas de crédito',
             style: const TextStyle(color: ContabiliColors.goldLight, fontWeight: FontWeight.w600),
           ),
           if (onEdit != null) ...[
@@ -249,6 +287,8 @@ class _SettingsFormState extends State<_SettingsForm> {
   late String _provider = widget.current.enabled ? widget.current.provider : 'test';
   late final _factura = TextEditingController(text: widget.current.facturaSeries);
   late final _boleta = TextEditingController(text: widget.current.boletaSeries);
+  late final _facturaNote = TextEditingController(text: widget.current.facturaNoteSeries);
+  late final _boletaNote = TextEditingController(text: widget.current.boletaNoteSeries);
   final _endpoint = TextEditingController();
   final _token = TextEditingController();
   bool _busy = false;
@@ -258,6 +298,8 @@ class _SettingsFormState extends State<_SettingsForm> {
   void dispose() {
     _factura.dispose();
     _boleta.dispose();
+    _facturaNote.dispose();
+    _boletaNote.dispose();
     _endpoint.dispose();
     _token.dispose();
     super.dispose();
@@ -274,6 +316,8 @@ class _SettingsFormState extends State<_SettingsForm> {
         provider: _provider,
         facturaSeries: _factura.text.trim().toUpperCase(),
         boletaSeries: _boleta.text.trim().toUpperCase(),
+        facturaNoteSeries: _facturaNote.text.trim().toUpperCase(),
+        boletaNoteSeries: _boletaNote.text.trim().toUpperCase(),
         endpoint: _provider == 'nubefact' && _endpoint.text.trim().isNotEmpty
             ? _endpoint.text.trim()
             : null,
@@ -332,6 +376,33 @@ class _SettingsFormState extends State<_SettingsForm> {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _boletaNote,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: series,
+                decoration: const InputDecoration(labelText: 'Notas de boletas', hintText: 'BC01'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _facturaNote,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: series,
+                decoration: const InputDecoration(labelText: 'Notas de facturas', hintText: 'FC01'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Las notas de crédito anulan una boleta o factura. Si usas Nubefact, registra estas series también allá.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         if (_provider == 'nubefact') ...[
           const SizedBox(height: 12),
           TextField(
@@ -374,16 +445,19 @@ class _EinvoiceTile extends StatelessWidget {
     required this.onOpen,
     this.onRefresh,
     this.onRecord,
+    this.onAnnul,
   });
 
   final Einvoice einvoice;
   final VoidCallback onOpen;
   final VoidCallback? onRefresh;
   final VoidCallback? onRecord;
+  final VoidCallback? onAnnul;
 
   @override
   Widget build(BuildContext context) {
     final e = einvoice;
+    final note = e.type == EinvoiceType.creditNote;
     final (color, background) = switch (e.status) {
       EinvoiceStatus.accepted => (ContabiliColors.green, ContabiliColors.greenSoft),
       EinvoiceStatus.test => (ContabiliColors.indigo, ContabiliColors.indigoSoft),
@@ -397,7 +471,11 @@ class _EinvoiceTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              IconBox(icon: Icons.receipt_long_outlined, color: color, background: background),
+              IconBox(
+                icon: note ? Icons.assignment_return_outlined : Icons.receipt_long_outlined,
+                color: color,
+                background: background,
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -419,9 +497,36 @@ class _EinvoiceTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(formatSoles(e.total), style: ContabiliFonts.amount(17)),
+              Text(
+                formatSoles(note ? -e.total : e.total),
+                style: ContabiliFonts.amount(
+                  17,
+                  color: note ? ContabiliColors.red : ContabiliColors.ink,
+                ),
+              ),
             ],
           ),
+          if (e.modifies case final m?) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Anula la ${m.type.label.toLowerCase()} ${m.label}'
+              '${e.creditReason == null ? '' : ' · ${e.creditReason!.label}'}',
+              style: const TextStyle(fontSize: 14, color: ContabiliColors.ink2),
+            ),
+          ],
+          if (e.creditNote case final n?) ...[
+            const SizedBox(height: 6),
+            Text(
+              n.status == EinvoiceStatus.pending
+                  ? 'Nota de crédito ${n.label} esperando a SUNAT'
+                  : 'Anulada con la nota de crédito ${n.label}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: ContabiliColors.red,
+              ),
+            ),
+          ],
           if (e.status == EinvoiceStatus.rejected && e.statusMessage != null) ...[
             const SizedBox(height: 6),
             Text(e.statusMessage!, style: const TextStyle(color: ContabiliColors.red)),
@@ -445,11 +550,134 @@ class _EinvoiceTile extends StatelessWidget {
                 TextButton.icon(
                   onPressed: onRecord,
                   icon: const Icon(Icons.edit_note, size: 20),
-                  label: const Text('Anotar la venta'),
+                  label: Text(note ? 'Descontar la venta' : 'Anotar la venta'),
+                ),
+              if (onAnnul != null)
+                TextButton.icon(
+                  onPressed: onAnnul,
+                  style: TextButton.styleFrom(foregroundColor: ContabiliColors.red),
+                  icon: const Icon(Icons.block, size: 20),
+                  label: const Text('Anular'),
                 ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Elegir por qué se anula. Devuelve el motivo solo si se confirma.
+class _AnnulSheet extends StatefulWidget {
+  const _AnnulSheet({required this.einvoice});
+
+  final Einvoice einvoice;
+
+  @override
+  State<_AnnulSheet> createState() => _AnnulSheetState();
+}
+
+class _AnnulSheetState extends State<_AnnulSheet> {
+  CreditReason _reason = CreditReason.operation;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.einvoice;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Anular ${e.type.label.toLowerCase()} ${e.label}',
+              style: ContabiliFonts.title(24),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Se emite una nota de crédito por ${formatSoles(e.total)} y la venta se descuenta de tus libros. No se puede deshacer.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            Text('¿Por qué la anulas?', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            for (final reason in CreditReason.values)
+              if (reason != CreditReason.wrongRuc || e.type == EinvoiceType.factura)
+                _ReasonOption(
+                  reason: reason,
+                  selected: reason == _reason,
+                  onTap: () => setState(() => _reason = reason),
+                ),
+            const SizedBox(height: 16),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: ContabiliColors.red),
+              onPressed: () => Navigator.of(context).pop(_reason),
+              child: const Text('Anular con nota de crédito'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Volver sin anular'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReasonOption extends StatelessWidget {
+  const _ReasonOption({required this.reason, required this.selected, required this.onTap});
+
+  final CreditReason reason;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        selected: selected,
+        button: true,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? ContabiliColors.terracottaSoft : null,
+              border: Border.all(
+                color: selected ? ContabiliColors.terracotta : ContabiliColors.line,
+                width: selected ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                  color: selected ? ContabiliColors.terracotta : ContabiliColors.ink3,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(reason.label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        reason.hint,
+                        style: const TextStyle(fontSize: 14, color: ContabiliColors.ink2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

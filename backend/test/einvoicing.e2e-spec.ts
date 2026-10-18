@@ -1,8 +1,13 @@
 import { writeFileSync } from 'node:fs';
 import { eq, sql } from 'drizzle-orm';
-import { einvoices, einvoiceSettings } from '../src/db/schema/index.js';
+import { documents, einvoices, einvoiceSettings } from '../src/db/schema/index.js';
 import { EINVOICE_PROVIDERS } from '../src/einvoicing/einvoicing.service.js';
-import type { EinvoiceProvider, EmitResult, ProviderCode } from '../src/einvoicing/providers.js';
+import type {
+  EinvoiceDraft,
+  EinvoiceProvider,
+  EmitResult,
+  ProviderCode,
+} from '../src/einvoicing/providers.js';
 import {
   addMember,
   constraintOf,
@@ -24,8 +29,10 @@ class ScriptedProvider implements EinvoiceProvider {
   };
   checks: EmitResult = { status: 'accepted', message: 'Aceptada' };
   calls = 0;
-  async emit(): Promise<EmitResult> {
+  last?: EinvoiceDraft;
+  async emit(draft: EinvoiceDraft): Promise<EmitResult> {
     this.calls++;
+    this.last = draft;
     return this.next;
   }
   async check(): Promise<EmitResult> {
@@ -87,6 +94,8 @@ describe('facturación electrónica beta (e2e)', () => {
       provider: 'test',
       facturaSeries: 'F001',
       boletaSeries: 'B001',
+      facturaNoteSeries: 'FC01',
+      boletaNoteSeries: 'BC01',
       endpointHost: null,
       hasToken: false,
     });
@@ -305,5 +314,211 @@ describe('facturación electrónica beta (e2e)', () => {
         ),
       ),
     ).toBe('einvoices_entry_status');
+  });
+
+  const creditNote = (id: string, einvoiceId: string, reason = '01') =>
+    t.http
+      .post(`/companies/${id}/einvoices/${einvoiceId}/credit-note`)
+      .set(owner.auth)
+      .send({ reason });
+
+  it('nota de crédito: anula la boleta, extorna la venta y el registro la resta', async () => {
+    const id = await company();
+    await configure(id).expect(200);
+    const sold = (await emit(id, boleta).expect(201)).body.einvoice;
+    const factura = (
+      await emit(id, {
+        ...boleta,
+        type: '01',
+        customer: { docType: 'ruc', number: randomRuc(), name: 'Comercial Andina SAC' },
+        total: 23600,
+      }).expect(201)
+    ).body.einvoice;
+
+    // La venta de un comprobante electrónico no se extorna a mano.
+    const [entry] = await t.db
+      .select({ entryId: einvoices.entryId })
+      .from(einvoices)
+      .where(eq(einvoices.id, sold.id));
+    const manual = await t.http
+      .post(`/companies/${id}/journal/${entry.entryId}/reverse`)
+      .set(owner.auth)
+      .send({})
+      .expect(409);
+    expect(manual.body.code).toBe('einvoice_needs_credit_note');
+
+    // El error en el RUC es de facturas.
+    expect((await creditNote(id, sold.id, '02').expect(400)).body.code).toBe('credit_reason_ruc');
+
+    const note = await creditNote(id, sold.id).expect(201);
+    expect(note.body.recordError).toBeNull();
+    expect(note.body.einvoice).toMatchObject({
+      type: '07',
+      typeLabel: 'Nota de crédito electrónica',
+      label: 'BC01-00000001',
+      status: 'test',
+      total: 11800,
+      recorded: true,
+      modifies: { id: sold.id, type: '03', label: 'B001-00000001' },
+      creditReason: { code: '01', label: 'Anulación de la operación' },
+    });
+    expect((await creditNote(id, sold.id).expect(409)).body.code).toBe('credit_note_exists');
+    // Una nota no se anula con otra nota.
+    expect((await creditNote(id, note.body.einvoice.id).expect(400)).body.code).toBe(
+      'credit_note_not_einvoice',
+    );
+    const facturaNote = await creditNote(id, factura.id, '02').expect(201);
+    expect(facturaNote.body.einvoice.label).toBe('FC01-00000001');
+
+    // La boleta figura con su nota; la venta quedó extornada.
+    const list = await t.http.get(`/companies/${id}/einvoices`).set(owner.auth).expect(200);
+    const original = list.body.find((e: { id: string }) => e.id === sold.id);
+    expect(original.creditNote).toEqual({
+      id: note.body.einvoice.id,
+      label: 'BC01-00000001',
+      status: 'test',
+    });
+    const reversed = await t.http
+      .get(`/companies/${id}/journal/${entry.entryId}`)
+      .set(owner.auth)
+      .expect(200);
+    expect(reversed.body.reversedByEntryId).not.toBeNull();
+    const reversal = await t.http
+      .get(`/companies/${id}/journal/${reversed.body.reversedByEntryId}`)
+      .set(owner.auth)
+      .expect(200);
+    expect(reversal.body).toMatchObject({
+      source: 'reversal',
+      description: 'Nota de crédito BC01-00000001: anula la boleta B001-00000001',
+      document: { type: '07', series: 'BC01', number: 1 },
+    });
+
+    // El registro de ventas: la boleta suma, la nota resta y nada figura «anulado».
+    const register = await t.http
+      .get(`/companies/${id}/registers/sales`)
+      .set(owner.auth)
+      .expect(200);
+    const rows = register.body.rows as {
+      docType: string;
+      series: string;
+      total: number;
+      annulled: boolean;
+      modifies: { docType: string; series: string; number: number } | null;
+    }[];
+    expect(rows.map((r) => [r.docType, r.series, r.total, r.annulled])).toEqual([
+      ['01', 'F001', 23600, false],
+      ['03', 'B001', 11800, false],
+      ['07', 'BC01', -11800, false],
+      ['07', 'FC01', -23600, false],
+    ]);
+    expect(rows[2].modifies).toMatchObject({ docType: '03', series: 'B001', number: 1 });
+    expect(register.body.totals).toMatchObject({ count: 4, base: 0, igv: 0, total: 0 });
+
+    // La nota de prueba tiene su PDF con el comprobante que modifica.
+    const link = await t.http
+      .post(`/companies/${id}/einvoices/${note.body.einvoice.id}/link`)
+      .set(owner.auth)
+      .expect(200);
+    const pdf = await t.web
+      .get(new URL(link.body.url).pathname)
+      .buffer(true)
+      .parse((res, done) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => done(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(pdf.headers['content-disposition']).toMatch(/nota-de-credito-\d{11}-BC01-00000001\.pdf/);
+    if (SAMPLES) writeFileSync(`${SAMPLES}/nota-de-credito-de-prueba.pdf`, pdf.body as Buffer);
+  });
+
+  it('nota de crédito con Nubefact: rechazada se puede repetir; pendiente se consulta', async () => {
+    const id = await company();
+    await configure(id, {
+      provider: 'nubefact',
+      facturaSeries: 'F003',
+      boletaSeries: 'B003',
+      boletaNoteSeries: 'bn03',
+      endpoint: 'https://api.nubefact.com/api/v1/abc-123',
+      token: 'token-de-nubefact-123',
+    }).expect(200);
+    scripted.next = { status: 'accepted', message: 'Aceptada' };
+    const sold = (await emit(id, boleta).expect(201)).body.einvoice;
+    expect(sold).toMatchObject({ label: 'B003-00000001', recorded: true });
+
+    // SUNAT rechaza la nota: el número se usó, la venta sigue y se puede emitir otra.
+    scripted.next = { status: 'rejected', message: 'El comprobante ya fue informado' };
+    const rejected = await creditNote(id, sold.id, '06').expect(201);
+    expect(rejected.body.einvoice).toMatchObject({
+      label: 'BN03-00000001',
+      status: 'rejected',
+      recorded: false,
+    });
+    expect(scripted.last?.note).toEqual({
+      type: '03',
+      series: 'B003',
+      number: 1,
+      reason: '06',
+    });
+
+    scripted.next = { status: 'pending', message: 'No supimos si llegó a tu proveedor.' };
+    const pending = await creditNote(id, sold.id, '06').expect(201);
+    expect(pending.body.einvoice).toMatchObject({
+      label: 'BN03-00000002',
+      status: 'pending',
+      recorded: false,
+    });
+    // Mientras está en trámite, no sale otra.
+    expect((await creditNote(id, sold.id).expect(409)).body.code).toBe('credit_note_exists');
+
+    scripted.checks = { status: 'accepted', message: 'La Nota de Credito ha sido aceptada' };
+    const refreshed = await t.http
+      .post(`/companies/${id}/einvoices/${pending.body.einvoice.id}/refresh`)
+      .set(owner.auth)
+      .expect(200);
+    expect(refreshed.body).toMatchObject({
+      recordError: null,
+      einvoice: { status: 'accepted', recorded: true },
+    });
+    const register = await t.http
+      .get(`/companies/${id}/registers/sales`)
+      .set(owner.auth)
+      .expect(200);
+    expect(register.body.totals.total).toBe(0);
+  });
+
+  it('la base exige que la nota diga qué modifica y que haya una sola viva', async () => {
+    const id = await company();
+    await configure(id).expect(200);
+    const sold = (await emit(id, boleta).expect(201)).body.einvoice;
+    const note = (await creditNote(id, sold.id).expect(201)).body.einvoice;
+    const [row] = await t.db.select().from(einvoices).where(eq(einvoices.id, note.id));
+    const { id: _id, createdAt: _c, updatedAt: _u, entryId: _e, ...copy } = row;
+    expect(await constraintOf(t.db.insert(einvoices).values({ ...copy, number: 2 }))).toBe(
+      'einvoices_one_note_uq',
+    );
+    expect(
+      await constraintOf(
+        t.db.insert(einvoices).values({ ...copy, number: 3, status: 'rejected', modifiesId: null }),
+      ),
+    ).toBe('einvoices_credit_note');
+
+    const [doc] = await t.db.select().from(documents).where(eq(documents.entryId, row.entryId!));
+    expect(doc).toMatchObject({ docType: '07', modifiedSeries: 'B001', modifiedNumber: 1 });
+    const { id: _d, createdAt: _dc, entryId: _de, ...docCopy } = doc;
+    const [other] = await t.db
+      .select({ entryId: einvoices.entryId })
+      .from(einvoices)
+      .where(eq(einvoices.id, sold.id));
+    expect(
+      await constraintOf(
+        t.db.insert(documents).values({
+          ...docCopy,
+          entryId: other.entryId!,
+          number: 9,
+          modifiedDocType: null,
+        }),
+      ),
+    ).toBe('documents_credit_note');
   });
 });

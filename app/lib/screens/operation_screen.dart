@@ -498,6 +498,7 @@ class _OperationScreenState extends State<OperationScreen> {
                 DocType.recibo => Icons.badge_outlined,
                 DocType.ticket => Icons.confirmation_number_outlined,
                 DocType.other => Icons.description_outlined,
+                DocType.creditNote => Icons.assignment_return_outlined,
               },
             ),
           (null, 'Ninguno', Icons.do_not_disturb_alt_outlined),

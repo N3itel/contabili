@@ -458,6 +458,50 @@ void main() {
     expect(api.documents.single.$3.counterpartyRuc, '20131312955');
   });
 
+  testWidgets('anula una boleta con nota de crédito y el registro la resta', (tester) async {
+    _largeText(tester);
+    final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
+    api.einvoicing = const EinvoiceSettings(enabled: true);
+    await api.emitEinvoice(
+      _companyId,
+      const EmitRequest(
+        type: EinvoiceType.boleta,
+        saleKind: SaleKind.goods,
+        paidWith: Settlement.cash,
+        customerDoc: CustomerDoc.none,
+        description: 'Abarrotes varios',
+        total: 11800,
+      ),
+    );
+    await _Harness(api).pump(tester);
+    await _tapText(tester, 'Más');
+    await _tapText(tester, 'Facturación electrónica (beta)');
+    await _tapText(tester, 'Anular');
+    expect(find.text('Anular boleta B001-00000001'), findsOneWidget);
+    // El error en el RUC es solo para facturas.
+    expect(find.text('Error en el RUC'), findsNothing);
+    await _tapText(tester, 'Devolución total');
+    expect(tester.takeException(), isNull, reason: 'Anular con letra grande');
+    await _tapButton(tester, 'Anular con nota de crédito');
+    expect(
+      find.text(
+        'Listo: emitiste la nota de crédito BC01-00000001 y la venta se descontó de tus libros.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Anulada con la nota de crédito BC01-00000001'), findsOneWidget);
+    expect(find.text('Anula la boleta B001-00000001 · Devolución total'), findsOneWidget);
+    expect(find.text('Anular'), findsNothing);
+
+    final register = await api.documentRegister(_companyId, RegisterKind.sales, period: api.period);
+    expect(
+      [for (final r in register.rows) (r.type, r.total, r.annulled)],
+      [(DocType.boleta, 11800, false), (DocType.creditNote, -11800, false)],
+    );
+    expect(register.total, 0);
+    expect(register.rows.last.modifies, 'Boleta B001-1');
+  });
+
   testWidgets('se ve que es beta', (tester) async {
     final api = FakeContabiliApi(signedIn: true, companies: [_company()]);
     await _Harness(api).pump(tester);

@@ -208,7 +208,11 @@ export const documents = pgTable(
     companyId: uuid('company_id').notNull(),
     entryId: uuid('entry_id').notNull(),
     direction: documentDirection('direction').notNull(),
-    /** Tabla 10 de SUNAT: 01 factura, 03 boleta, 02 recibo por honorarios, 12 ticket, 00 otro. */
+    /**
+     * Tabla 10 de SUNAT: 01 factura, 03 boleta, 02 recibo por honorarios,
+     * 12 ticket, 00 otro y 07 nota de crédito (solo electrónica, va en el
+     * extorno de la venta que anula).
+     */
     docType: varchar('doc_type', { length: 2 }).notNull(),
     series: varchar('series', { length: 20 }).notNull(),
     number: integer('number').notNull(),
@@ -218,6 +222,11 @@ export const documents = pgTable(
     baseCents: bigint('base_cents', { mode: 'number' }).notNull(),
     igvCents: bigint('igv_cents', { mode: 'number' }).notNull(),
     totalCents: bigint('total_cents', { mode: 'number' }).notNull(),
+    /** Nota de crédito: el comprobante que modifica. */
+    modifiedDocType: varchar('modified_doc_type', { length: 2 }),
+    modifiedSeries: varchar('modified_series', { length: 20 }),
+    modifiedNumber: integer('modified_number'),
+    modifiedIssueDate: date('modified_issue_date'),
     createdAt: createdAt(),
   },
   (t) => [
@@ -236,11 +245,16 @@ export const documents = pgTable(
       .on(t.companyId, t.docType, t.series, t.number, t.counterpartyRuc)
       .where(sql`${t.direction} = 'purchase'`),
     index('documents_register_idx').on(t.companyId, t.direction, t.issueDate),
-    check('documents_doc_type', sql`${t.docType} IN ('01', '02', '03', '12', '00')`),
+    check('documents_doc_type', sql`${t.docType} IN ('01', '02', '03', '12', '00', '07')`),
     check('documents_recibo_purchase', sql`${t.docType} <> '02' OR ${t.direction} = 'purchase'`),
     check(
       'documents_ruc_required',
-      sql`${t.docType} NOT IN ('01', '02') OR ${t.counterpartyRuc} IS NOT NULL`,
+      sql`(${t.docType} NOT IN ('01', '02') AND ${t.modifiedDocType} IS DISTINCT FROM '01') OR ${t.counterpartyRuc} IS NOT NULL`,
+    ),
+    // La nota de crédito es de venta y siempre dice qué boleta o factura modifica.
+    check(
+      'documents_credit_note',
+      sql`(${t.docType} = '07') = (${t.modifiedDocType} IS NOT NULL) AND (${t.docType} <> '07' OR (${t.direction} = 'sale' AND ${t.modifiedDocType} IN ('01', '03') AND ${t.modifiedSeries} IS NOT NULL AND ${t.modifiedNumber} IS NOT NULL AND ${t.modifiedIssueDate} IS NOT NULL))`,
     ),
     check(
       'documents_ruc_format',

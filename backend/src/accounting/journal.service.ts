@@ -11,6 +11,7 @@ import {
   companies,
   contacts,
   documents,
+  einvoices,
   journalEntries,
   journalLines,
   users,
@@ -80,9 +81,8 @@ export class JournalService {
     @Inject(CompanyAccess) private readonly access: CompanyAccess,
   ) {}
 
-  /** Registra un asiento con el siguiente número correlativo del ejercicio. */
   /**
-   * Registra un asiento. `alongside` corre en la misma transacción, después
+   * Registra un asiento con el siguiente número correlativo del ejercicio. `alongside` corre en la misma transacción, después
    * del asiento (por ejemplo, para guardar su comprobante): si falla, no queda nada.
    */
   async post(
@@ -103,15 +103,31 @@ export class JournalService {
   /**
    * Extorna un asiento: registra otro con los mismos montos en el lado
    * opuesto. Cada asiento se extorna una sola vez y un extorno no se extorna.
+   * La venta de un comprobante electrónico solo se extorna con su nota de
+   * crédito: `creditNote` la guarda en la misma transacción que el extorno.
    */
   async reverse(
     companyId: string,
     actorId: string,
     entryId: string,
     input: { entryDate?: string; description?: string },
+    creditNote?: (tx: Tx, reversalId: string) => Promise<void>,
   ): Promise<JournalEntryDto> {
     await this.access.requireWritable(companyId, actorId, 'accountant');
     const original = await this.get(companyId, actorId, entryId);
+    if (!creditNote) {
+      const [electronic] = await this.db
+        .select({ id: einvoices.id })
+        .from(einvoices)
+        .where(and(eq(einvoices.companyId, companyId), eq(einvoices.entryId, entryId)));
+      if (electronic) {
+        throw apiError(
+          HttpStatus.CONFLICT,
+          'einvoice_needs_credit_note',
+          'Esta venta tiene un comprobante electrónico: anúlalo con una nota de crédito desde Más → Facturación electrónica.',
+        );
+      }
+    }
     if (original.reversesEntryId) {
       throw apiError(
         HttpStatus.CONFLICT,
@@ -149,6 +165,7 @@ export class JournalService {
           { entryDate, description, lines, source: 'reversal' },
           entryId,
         );
+        if (creditNote) await creditNote(tx, newId);
         await audit(tx, {
           actorId,
           action: 'entry.reversed',

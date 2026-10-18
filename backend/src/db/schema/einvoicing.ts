@@ -8,6 +8,7 @@ import {
   integer,
   pgTable,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -30,6 +31,9 @@ export const einvoiceSettings = pgTable(
     provider: varchar('provider', { length: 16 }).notNull(),
     facturaSeries: varchar('factura_series', { length: 4 }).notNull(),
     boletaSeries: varchar('boleta_series', { length: 4 }).notNull(),
+    /** Series de las notas de crédito: de facturas (F…) y de boletas (B…). */
+    facturaNoteSeries: varchar('factura_note_series', { length: 4 }).notNull().default('FC01'),
+    boletaNoteSeries: varchar('boleta_note_series', { length: 4 }).notNull().default('BC01'),
     endpoint: varchar('endpoint', { length: 300 }),
     tokenEncrypted: varchar('token_encrypted', { length: 500 }),
     updatedBy: uuid('updated_by')
@@ -42,6 +46,10 @@ export const einvoiceSettings = pgTable(
     check('einvoice_settings_factura_series', sql`${t.facturaSeries} ~ '^F[A-Z0-9]{3}$'`),
     check('einvoice_settings_boleta_series', sql`${t.boletaSeries} ~ '^B[A-Z0-9]{3}$'`),
     check(
+      'einvoice_settings_note_series',
+      sql`${t.facturaNoteSeries} ~ '^F[A-Z0-9]{3}$' AND ${t.boletaNoteSeries} ~ '^B[A-Z0-9]{3}$'`,
+    ),
+    check(
       'einvoice_settings_nubefact_credentials',
       sql`${t.provider} <> 'nubefact' OR (${t.endpoint} IS NOT NULL AND ${t.tokenEncrypted} IS NOT NULL)`,
     ),
@@ -49,9 +57,10 @@ export const einvoiceSettings = pgTable(
 );
 
 /**
- * Boletas y facturas electrónicas emitidas. El número es correlativo por
- * serie (índice único) y se reserva antes de mandarlo al proveedor. Cuando
- * el comprobante sale, se anota la venta y queda ligado a su asiento.
+ * Boletas, facturas y notas de crédito electrónicas emitidas. El número es
+ * correlativo por tipo y serie (índice único) y se reserva antes de mandarlo
+ * al proveedor. Cuando el comprobante sale, se anota la venta y queda ligado
+ * a su asiento; la nota de crédito, al extorno de esa venta.
  */
 export const einvoices = pgTable(
   'einvoices',
@@ -82,8 +91,11 @@ export const einvoices = pgTable(
     xmlUrl: varchar('xml_url', { length: 500 }),
     cdrUrl: varchar('cdr_url', { length: 500 }),
     hash: varchar('hash', { length: 120 }),
-    /** Asiento de la venta, cuando ya se anotó. */
+    /** Asiento de la venta (o, en una nota de crédito, su extorno), cuando ya se anotó. */
     entryId: uuid('entry_id'),
+    /** Nota de crédito: la boleta o factura que anula y por qué (catálogo 09). */
+    modifiesId: uuid('modifies_id'),
+    creditReason: varchar('credit_reason', { length: 2 }),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id),
@@ -93,6 +105,17 @@ export const einvoices = pgTable(
   (t) => [
     unique('einvoices_number_uq').on(t.companyId, t.docType, t.series, t.number),
     unique('einvoices_entry_uq').on(t.entryId),
+    unique('einvoices_id_company_uq').on(t.id, t.companyId),
+    // La nota de crédito anula un comprobante de la misma empresa.
+    foreignKey({
+      name: 'einvoices_modifies_fk',
+      columns: [t.modifiesId, t.companyId],
+      foreignColumns: [t.id, t.companyId],
+    }),
+    // Una sola nota viva por comprobante: si SUNAT rechaza una, se puede emitir otra.
+    uniqueIndex('einvoices_one_note_uq')
+      .on(t.modifiesId)
+      .where(sql`${t.modifiesId} IS NOT NULL AND ${t.status} <> 'rejected'`),
     foreignKey({
       name: 'einvoices_entry_fk',
       columns: [t.entryId, t.companyId],
@@ -105,10 +128,14 @@ export const einvoices = pgTable(
       foreignColumns: [contacts.id, contacts.companyId],
     }),
     index('einvoices_company_date_idx').on(t.companyId, t.issueDate),
-    check('einvoices_doc_type', sql`${t.docType} IN ('01', '03')`),
+    check('einvoices_doc_type', sql`${t.docType} IN ('01', '03', '07')`),
     check(
       'einvoices_series',
-      sql`(${t.docType} = '01' AND ${t.series} ~ '^F[A-Z0-9]{3}$') OR (${t.docType} = '03' AND ${t.series} ~ '^B[A-Z0-9]{3}$')`,
+      sql`(${t.docType} = '01' AND ${t.series} ~ '^F[A-Z0-9]{3}$') OR (${t.docType} = '03' AND ${t.series} ~ '^B[A-Z0-9]{3}$') OR (${t.docType} = '07' AND ${t.series} ~ '^[FB][A-Z0-9]{3}$')`,
+    ),
+    check(
+      'einvoices_credit_note',
+      sql`(${t.docType} = '07') = (${t.modifiesId} IS NOT NULL) AND (${t.docType} = '07') = (${t.creditReason} IS NOT NULL) AND (${t.creditReason} IS NULL OR ${t.creditReason} IN ('01', '02', '06'))`,
     ),
     check('einvoices_number_range', sql`${t.number} BETWEEN 1 AND 99999999`),
     check('einvoices_provider', sql`${t.provider} IN ('test', 'nubefact')`),

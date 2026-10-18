@@ -1,5 +1,10 @@
 import type { Cents } from '../accounting/money.js';
-import type { CustomerDocType, EinvoiceType } from './einvoice-rules.js';
+import type {
+  CreditReason,
+  CustomerDocType,
+  EinvoiceDocType,
+  EinvoiceType,
+} from './einvoice-rules.js';
 
 /**
  * Proveedores de facturación electrónica. En beta: Nubefact (cada empresa
@@ -10,7 +15,7 @@ import type { CustomerDocType, EinvoiceType } from './einvoice-rules.js';
 export type ProviderCode = 'test' | 'nubefact';
 
 export interface EinvoiceDraft {
-  type: EinvoiceType;
+  type: EinvoiceDocType;
   series: string;
   number: number;
   /** 'AAAA-MM-DD', fecha de Lima. */
@@ -21,6 +26,8 @@ export interface EinvoiceDraft {
   base: Cents;
   igv: Cents;
   total: Cents;
+  /** Nota de crédito: el comprobante que anula y el motivo (catálogo 09). */
+  note?: { type: EinvoiceType; series: string; number: number; reason: CreditReason };
 }
 
 export interface Credentials {
@@ -73,12 +80,15 @@ export function isAllowedEndpoint(endpoint: string): boolean {
 
 const decimal = (cents: Cents) => (cents / 100).toFixed(2);
 
+/** Tipo de comprobante en Nubefact: 1 factura, 2 boleta, 3 nota de crédito. */
+const NUBEFACT_TYPE: Readonly<Record<EinvoiceDocType, number>> = { '01': 1, '03': 2, '07': 3 };
+
 /** El comprobante en el formato JSON de Nubefact («generar_comprobante»). */
 export function nubefactPayload(d: EinvoiceDraft): Record<string, unknown> {
   const { docType, number, name } = d.customer;
   return {
     operacion: 'generar_comprobante',
-    tipo_de_comprobante: d.type === '01' ? 1 : 2,
+    tipo_de_comprobante: NUBEFACT_TYPE[d.type],
     serie: d.series,
     numero: d.number,
     sunat_transaction: 1,
@@ -98,6 +108,12 @@ export function nubefactPayload(d: EinvoiceDraft): Record<string, unknown> {
     total: decimal(d.total),
     enviar_automaticamente_a_la_sunat: true,
     enviar_automaticamente_al_cliente: false,
+    ...(d.note && {
+      documento_que_se_modifica_tipo: NUBEFACT_TYPE[d.note.type],
+      documento_que_se_modifica_serie: d.note.series,
+      documento_que_se_modifica_numero: d.note.number,
+      tipo_de_nota_de_credito: Number(d.note.reason),
+    }),
     items: [
       {
         unidad_de_medida: d.kind === 'goods' ? 'NIU' : 'ZZ',
@@ -156,7 +172,7 @@ export class NubefactProvider implements EinvoiceProvider {
     return this.call(
       {
         operacion: 'consultar_comprobante',
-        tipo_de_comprobante: draft.type === '01' ? 1 : 2,
+        tipo_de_comprobante: NUBEFACT_TYPE[draft.type],
         serie: draft.series,
         numero: draft.number,
       },

@@ -15,6 +15,7 @@ import { isValidDate, limaDate } from '../accounting/lima.js';
 import { ExportsService } from '../accounting/exports.service.js';
 import { type AuthContext, CurrentAuth } from '../auth/auth.guard.js';
 import { uuidParam, ZodPipe } from '../common/http.js';
+import type { CreditReason } from './einvoice-rules.js';
 import { EinvoicingService } from './einvoicing.service.js';
 
 const period = z
@@ -26,6 +27,8 @@ const settingsBody = z.object({
   provider: z.enum(['test', 'nubefact']),
   facturaSeries: z.string().trim().length(4),
   boletaSeries: z.string().trim().length(4),
+  facturaNoteSeries: z.string().trim().length(4).optional(),
+  boletaNoteSeries: z.string().trim().length(4).optional(),
   endpoint: z.string().trim().max(300).optional(),
   token: z.string().trim().min(10).max(300).optional(),
 });
@@ -100,6 +103,18 @@ export class EinvoicingController {
     @Param('id', uuidParam()) id: string,
   ) {
     return this.einvoicing.refresh(companyId, auth.userId, id);
+  }
+
+  /** Anula la boleta o factura con una nota de crédito por el total. */
+  @Post('einvoices/:id/credit-note')
+  creditNote(
+    @CurrentAuth() auth: AuthContext,
+    @Param('companyId', uuidParam()) companyId: string,
+    @Param('id', uuidParam()) id: string,
+    @Body(new ZodPipe(z.object({ reason: z.enum(['01', '02', '06']) })))
+    body: { reason: CreditReason },
+  ) {
+    return this.einvoicing.creditNote(companyId, auth.userId, id, body.reason);
   }
 
   @Post('einvoices/:id/record')

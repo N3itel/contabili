@@ -19,7 +19,14 @@ import { CSV_BOM, csvAmount, csvRow, csvText } from './csv.js';
 import { formatDate, limaDate } from './lima.js';
 import { einvoicePdf } from '../pdf/einvoice-pdf.js';
 import { journalPdf, monthlyReportPdf, registerPdf, trialBalancePdf } from '../pdf/reports.js';
-import type { CustomerDocType, EinvoiceType } from '../einvoicing/einvoice-rules.js';
+import {
+  CREDIT_REASONS,
+  type CreditReason,
+  type CustomerDocType,
+  type EinvoiceDocType,
+  einvoiceNumberLabel,
+  type EinvoiceType,
+} from '../einvoicing/einvoice-rules.js';
 import { RegistersService } from './registers.service.js';
 import { ReportsService } from './reports.service.js';
 
@@ -229,13 +236,31 @@ export class ExportsService {
       .from(einvoices)
       .where(and(eq(einvoices.id, claims.einvoiceId), eq(einvoices.companyId, claims.companyId)));
     if (!row) throw linkExpired();
-    const label = `${row.series}-${String(row.number).padStart(8, '0')}`;
+    const [original] = row.modifiesId
+      ? await this.db
+          .select()
+          .from(einvoices)
+          .where(and(eq(einvoices.id, row.modifiesId), eq(einvoices.companyId, claims.companyId)))
+      : [];
+    const label = einvoiceNumberLabel(row.series, row.number);
+    const kind = { '01': 'factura', '03': 'boleta', '07': 'nota-de-credito' }[
+      row.docType as EinvoiceDocType
+    ];
     return {
-      filename: `${row.docType === '01' ? 'factura' : 'boleta'}-${company.ruc}-${label}.pdf`,
+      filename: `${kind}-${company.ruc}-${label}.pdf`,
       contentType: 'application/pdf',
       body: await einvoicePdf({
         company,
-        type: row.docType as EinvoiceType,
+        type: row.docType as EinvoiceDocType,
+        note:
+          original && row.creditReason
+            ? {
+                type: original.docType as EinvoiceType,
+                label: einvoiceNumberLabel(original.series, original.number),
+                issueDate: original.issueDate,
+                reason: CREDIT_REASONS[row.creditReason as CreditReason],
+              }
+            : undefined,
         series: row.series,
         number: row.number,
         issueDate: row.issueDate,
@@ -368,6 +393,10 @@ export class ExportsService {
       'IGV',
       'Total',
       'Estado',
+      'Modifica: tipo',
+      'Modifica: serie',
+      'Modifica: número',
+      'Modifica: fecha',
     ]);
     for (const r of report.rows) {
       csv += csvRow([
@@ -382,6 +411,10 @@ export class ExportsService {
         csvAmount(r.igv),
         csvAmount(r.total),
         r.annulled ? 'Anulado' : '',
+        r.modifies?.docType ?? '',
+        csvText(r.modifies?.series ?? ''),
+        r.modifies ? String(r.modifies.number) : '',
+        r.modifies ? formatDate(r.modifies.issueDate) : '',
       ]);
     }
     const t = report.totals;
@@ -396,6 +429,10 @@ export class ExportsService {
       csvAmount(t.base),
       csvAmount(t.igv),
       csvAmount(t.total),
+      '',
+      '',
+      '',
+      '',
       '',
     ]);
     return csv;

@@ -226,6 +226,17 @@ void main() {
     await _tap(tester, 'Listo');
     await _waitFor(tester, find.text('Boleta B002-00000001'));
     await _shot(tester, '10c-facturacion');
+
+    // Se anula con nota de crédito: la venta se extorna en el servidor.
+    await _tap(tester, 'Anular');
+    await _waitFor(tester, find.text('¿Por qué la anulas?'));
+    await _shot(tester, '10d-anular');
+    final annul = find.widgetWithText(FilledButton, 'Anular con nota de crédito');
+    await tester.ensureVisible(annul);
+    await tester.tap(annul);
+    await _waitFor(tester, find.text('Anulada con la nota de crédito BC01-00000001'));
+    expect(find.text('Anula la boleta B002-00000001 · Anulación de la operación'), findsOneWidget);
+    await _shot(tester, '10e-anulada');
     await tester.tap(find.byTooltip('Atrás'));
     await _settle(tester);
 

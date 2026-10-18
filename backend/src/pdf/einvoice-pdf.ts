@@ -3,6 +3,7 @@ import { formatSoles } from '../accounting/money.js';
 import {
   amountInWords,
   type CustomerDocType,
+  type EinvoiceDocType,
   EINVOICE_TYPES,
   einvoiceNumberLabel,
   type EinvoiceType,
@@ -12,7 +13,9 @@ import { ReportPdf } from './report-pdf.js';
 
 export interface EinvoicePdfInput {
   company: PdfCompany;
-  type: EinvoiceType;
+  type: EinvoiceDocType;
+  /** Nota de crédito: la boleta o factura que anula y el motivo. */
+  note?: { type: EinvoiceType; label: string; issueDate: string; reason: string };
   series: string;
   number: number;
   issueDate: string;
@@ -26,7 +29,7 @@ export interface EinvoicePdfInput {
   hash: string | null;
 }
 
-/** Representación impresa de la boleta o factura electrónica. */
+/** Representación impresa de la boleta, factura o nota de crédito electrónica. */
 export function einvoicePdf(input: EinvoicePdfInput): Promise<Buffer> {
   const label = einvoiceNumberLabel(input.series, input.number);
   const pdf = new ReportPdf({
@@ -46,6 +49,16 @@ export function einvoicePdf(input: EinvoicePdfInput): Promise<Buffer> {
       value: docType === 'none' ? 'Clientes varios' : (name ?? '—'),
     },
   ]);
+  if (input.note) {
+    pdf.section('Documento que modifica').keyValues([
+      {
+        label: 'Comprobante',
+        value: `${EINVOICE_TYPES[input.note.type]} ${input.note.label}`,
+      },
+      { label: 'Fecha de emisión', value: formatDate(input.note.issueDate) },
+      { label: 'Motivo', value: input.note.reason },
+    ]);
+  }
   pdf.section('Detalle').table(
     [
       { header: 'Cant.', width: 1, align: 'center' },

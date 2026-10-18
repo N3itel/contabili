@@ -225,6 +225,8 @@ class HttpContabiliApi implements ContabiliApi {
     required String provider,
     required String facturaSeries,
     required String boletaSeries,
+    String? facturaNoteSeries,
+    String? boletaNoteSeries,
     String? endpoint,
     String? token,
   }) async => EinvoiceSettings.fromJson(
@@ -235,6 +237,8 @@ class HttpContabiliApi implements ContabiliApi {
         'provider': provider,
         'facturaSeries': facturaSeries,
         'boletaSeries': boletaSeries,
+        'facturaNoteSeries': ?facturaNoteSeries,
+        'boletaNoteSeries': ?boletaNoteSeries,
         'endpoint': ?endpoint,
         'token': ?token,
       },
@@ -264,6 +268,19 @@ class HttpContabiliApi implements ContabiliApi {
       EinvoiceResult.fromJson(
         await _json('POST', '${_company(companyId)}/einvoices/$einvoiceId/record'),
       );
+
+  @override
+  Future<EinvoiceResult> creditNote(
+    String companyId,
+    String einvoiceId,
+    CreditReason reason,
+  ) async => EinvoiceResult.fromJson(
+    await _json(
+      'POST',
+      '${_company(companyId)}/einvoices/$einvoiceId/credit-note',
+      body: {'reason': reason.wire},
+    ),
+  );
 
   @override
   Future<Uri> einvoiceLink(String companyId, String einvoiceId) async => Uri.parse(

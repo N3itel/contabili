@@ -113,6 +113,13 @@
       "when": 1792286901069,
       "tag": "0015_facturacion_cliente",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792290157377,
+      "tag": "0016_notas_de_credito",
+      "breakpoints": true
     }
   ]
 }

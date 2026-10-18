@@ -59,6 +59,27 @@ describe('proveedores de facturación', () => {
       cliente_denominacion: 'Comercial Andina SAC',
     });
     expect((factura.items as { unidad_de_medida: string }[])[0].unidad_de_medida).toBe('ZZ');
+    expect(factura).not.toHaveProperty('tipo_de_nota_de_credito');
+  });
+
+  it('arma la nota de crédito con el comprobante que anula', () => {
+    const note = nubefactPayload({
+      ...draft,
+      type: '07',
+      series: 'BC01',
+      number: 3,
+      note: { type: '03', series: 'B001', number: 45, reason: '06' },
+    });
+    expect(note).toMatchObject({
+      tipo_de_comprobante: 3,
+      serie: 'BC01',
+      numero: 3,
+      documento_que_se_modifica_tipo: 2,
+      documento_que_se_modifica_serie: 'B001',
+      documento_que_se_modifica_numero: 45,
+      tipo_de_nota_de_credito: 6,
+      total: '118.00',
+    });
   });
 
   it('lee aceptado, rechazado, pendiente y error', () => {

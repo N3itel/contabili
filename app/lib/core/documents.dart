@@ -8,7 +8,10 @@ enum DocType {
   boleta('03', 'Boleta', sale: true, purchase: true),
   recibo('02', 'Recibo por honorarios', sale: false, purchase: true),
   ticket('12', 'Ticket', sale: true, purchase: true),
-  other('00', 'Otro comprobante', sale: true, purchase: true);
+  other('00', 'Otro comprobante', sale: true, purchase: true),
+
+  /// Solo sale de la facturación electrónica: anula una boleta o factura y resta.
+  creditNote('07', 'Nota de crédito', sale: false, purchase: false);
 
   const DocType(this.wire, this.label, {required this.sale, required this.purchase});
 

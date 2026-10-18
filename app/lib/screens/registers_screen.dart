@@ -281,9 +281,14 @@ class _RowTile extends StatelessWidget {
               DocType.recibo => Icons.badge_outlined,
               DocType.ticket => Icons.confirmation_number_outlined,
               DocType.other => Icons.description_outlined,
+              DocType.creditNote => Icons.assignment_return_outlined,
             },
-            color: row.annulled ? ContabiliColors.ink3 : ContabiliColors.indigo,
-            background: row.annulled ? ContabiliColors.sand : ContabiliColors.indigoSoft,
+            color: row.annulled
+                ? ContabiliColors.ink3
+                : (row.total < 0 ? ContabiliColors.red : ContabiliColors.indigo),
+            background: row.annulled
+                ? ContabiliColors.sand
+                : (row.total < 0 ? ContabiliColors.redSoft : ContabiliColors.indigoSoft),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -301,6 +306,7 @@ class _RowTile extends StatelessWidget {
                 Text(
                   [
                     formatDate(row.issueDate),
+                    if (row.modifies != null) 'anula ${row.modifies}',
                     if (who.isNotEmpty) who,
                     if (row.annulled) 'Anulado',
                   ].join(' · '),
@@ -317,10 +323,12 @@ class _RowTile extends StatelessWidget {
                 formatSoles(row.total),
                 style: ContabiliFonts.amount(
                   17,
-                  color: row.annulled ? ContabiliColors.ink3 : ContabiliColors.ink,
+                  color: row.annulled
+                      ? ContabiliColors.ink3
+                      : (row.total < 0 ? ContabiliColors.red : ContabiliColors.ink),
                 ),
               ),
-              if (row.igv > 0)
+              if (row.igv != 0)
                 Text(
                   'IGV ${formatSoles(row.igv)}',
                   style: const TextStyle(fontSize: 13, color: ContabiliColors.ink2),
